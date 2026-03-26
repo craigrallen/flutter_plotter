@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/nmea/nmea_stream.dart';
 import '../../data/providers/nmea_config_provider.dart';
+import '../../data/providers/settings_provider.dart';
+import 'nmea_debug_screen.dart';
+import 'offline_tiles_screen.dart';
 
-/// Settings screen with NMEA connection configuration.
+/// Settings screen with NMEA connection, alarms, units, and debug options.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -27,6 +30,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final config = ref.watch(nmeaConfigProvider);
     final connState = ref.watch(nmeaConnectionStateProvider);
+    final settings = ref.watch(appSettingsProvider);
 
     // Initialize text fields from saved config (once)
     if (!_initialized) {
@@ -46,14 +50,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('NMEA Connection', style: Theme.of(context).textTheme.titleMedium),
+          // ── NMEA Connection ──
+          Text('NMEA Connection',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
 
-          // Connection status
           _StatusIndicator(state: connectionState),
           const SizedBox(height: 16),
 
-          // Host
           TextField(
             controller: _hostController,
             decoration: const InputDecoration(
@@ -65,7 +69,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Port
           TextField(
             controller: _portController,
             decoration: const InputDecoration(
@@ -77,7 +80,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Protocol toggle
           SegmentedButton<NmeaProtocol>(
             segments: const [
               ButtonSegment(value: NmeaProtocol.tcp, label: Text('TCP')),
@@ -92,7 +94,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Connect / Disconnect button
           FilledButton.icon(
             onPressed: () => _toggleConnection(connectionState, config),
             icon: Icon(
@@ -108,6 +109,110 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ? 'Connecting...'
                       : 'Connect',
             ),
+          ),
+
+          const Divider(height: 40),
+
+          // ── Units ──
+          Text('Units', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          SegmentedButton<UnitSystem>(
+            segments: const [
+              ButtonSegment(value: UnitSystem.nautical, label: Text('Nautical')),
+              ButtonSegment(value: UnitSystem.metric, label: Text('Metric')),
+              ButtonSegment(value: UnitSystem.imperial, label: Text('Imperial')),
+            ],
+            selected: {settings.units},
+            onSelectionChanged: (selection) {
+              ref.read(appSettingsProvider.notifier).update(
+                    settings.copyWith(units: selection.first),
+                  );
+            },
+          ),
+
+          const Divider(height: 40),
+
+          // ── CPA Alarm ──
+          Text('CPA Alarm', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          _SliderSetting(
+            label: 'CPA Distance Threshold',
+            value: settings.cpaAlarmDistanceNm,
+            min: 0.1,
+            max: 5.0,
+            divisions: 49,
+            format: (v) => '${v.toStringAsFixed(1)} nm',
+            onChanged: (v) {
+              ref.read(appSettingsProvider.notifier).update(
+                    settings.copyWith(cpaAlarmDistanceNm: v),
+                  );
+            },
+          ),
+          const SizedBox(height: 8),
+
+          _SliderSetting(
+            label: 'TCPA Time Threshold',
+            value: settings.cpaAlarmTimeMinutes,
+            min: 1,
+            max: 60,
+            divisions: 59,
+            format: (v) => '${v.toStringAsFixed(0)} min',
+            onChanged: (v) {
+              ref.read(appSettingsProvider.notifier).update(
+                    settings.copyWith(cpaAlarmTimeMinutes: v),
+                  );
+            },
+          ),
+
+          const Divider(height: 40),
+
+          // ── Display ──
+          Text('Display', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          SwitchListTile(
+            title: const Text('Night Mode'),
+            subtitle: const Text('Red-tinted display for dark adaptation'),
+            value: settings.nightMode,
+            onChanged: (_) {
+              ref.read(appSettingsProvider.notifier).toggleNightMode();
+            },
+          ),
+
+          const Divider(height: 40),
+
+          // ── Debug & Tools ──
+          Text('Tools', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          ListTile(
+            leading: const Icon(Icons.download),
+            title: const Text('Offline Tiles'),
+            subtitle: const Text('Download charts for offline use'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const OfflineTilesScreen()),
+              );
+            },
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.terminal),
+            title: const Text('NMEA Debug'),
+            subtitle: const Text('View raw NMEA sentences'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NmeaDebugScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -168,6 +273,50 @@ class _StatusIndicator extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(label),
+      ],
+    );
+  }
+}
+
+class _SliderSetting extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String Function(double) format;
+  final ValueChanged<double> onChanged;
+
+  const _SliderSetting({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.format,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label),
+            Text(format(value),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+        ),
       ],
     );
   }

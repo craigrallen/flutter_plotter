@@ -1,12 +1,20 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import '../../core/nmea/nmea_stream.dart';
+import '../../data/models/ais_target.dart';
 import '../../data/models/vessel_state.dart';
 import '../../data/models/waypoint.dart';
+import '../../data/providers/ais_provider.dart';
 import '../../data/providers/chart_tile_provider.dart';
+import '../../data/providers/nmea_config_provider.dart';
 import '../../data/providers/route_provider.dart';
+import '../../data/providers/settings_provider.dart';
 import '../../data/providers/vessel_provider.dart';
+import '../instruments/instrument_panel.dart';
 import 'layers/vessel_layer.dart';
 import 'layers/ais_layer.dart';
 import 'layers/route_layer.dart';
@@ -25,6 +33,9 @@ class ChartScreen extends ConsumerStatefulWidget {
 class _ChartScreenState extends ConsumerState<ChartScreen> {
   final _mapController = MapController();
   bool _followVessel = true;
+  bool _instrumentsVisible = false;
+  bool _cpaAlarmFlash = false;
+  Timer? _flashTimer;
 
   // Tile providers.
   final _baseLayer = OsmBaseProvider();
@@ -32,6 +43,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
 
   @override
   void dispose() {
+    _flashTimer?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -96,11 +108,66 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     );
   }
 
+  /// Check if any AIS target exceeds alarm thresholds.
+  void _checkCpaAlarm() {
+    final settings = ref.read(appSettingsProvider);
+    final targets = ref.read(aisProvider);
+    final vessel = ref.read(vesselProvider);
+    if (vessel.position == null) return;
+
+    bool alarm = false;
+    for (final target in targets.values) {
+      if (target.isStale) continue;
+      final cpa = target.computeCpa(
+        vessel.position!,
+        vessel.sog ?? 0,
+        vessel.cog ?? 0,
+      );
+      if (cpa.tcpaMinutes > 0 &&
+          cpa.tcpaMinutes < settings.cpaAlarmTimeMinutes &&
+          cpa.cpaNm < settings.cpaAlarmDistanceNm) {
+        alarm = true;
+        break;
+      }
+    }
+
+    if (alarm && !_cpaAlarmFlash) {
+      HapticFeedback.heavyImpact();
+      SystemSound.play(SystemSoundType.alert);
+      _startFlash();
+    } else if (!alarm && _cpaAlarmFlash) {
+      _stopFlash();
+    }
+  }
+
+  void _startFlash() {
+    setState(() => _cpaAlarmFlash = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!mounted) return;
+      setState(() => _cpaAlarmFlash = !_cpaAlarmFlash);
+    });
+  }
+
+  void _stopFlash() {
+    _flashTimer?.cancel();
+    _flashTimer = null;
+    if (mounted) setState(() => _cpaAlarmFlash = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final vessel = ref.watch(vesselProvider);
     final courseUp = ref.watch(courseUpProvider);
     final navData = ref.watch(routeNavProvider);
+    final settings = ref.watch(appSettingsProvider);
+    final connState = ref.watch(nmeaConnectionStateProvider);
+
+    final connectionState = connState.when(
+      data: (s) => s,
+      loading: () => NmeaConnectionState.disconnected,
+      error: (_, _) => NmeaConnectionState.disconnected,
+    );
 
     // Auto-follow: when enabled, keep map centred on vessel.
     final mapRotation = courseUp ? -(vessel.cog ?? 0) : 0.0;
@@ -114,63 +181,185 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
       }
     });
 
+    // Check CPA alarm on AIS updates
+    ref.listen<Map<int, AisTarget>>(aisProvider, (_, _) => _checkCpaAlarm());
+
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: vessel.position ?? const LatLng(57.7089, 11.9746),
-              initialZoom: 13,
-              initialRotation: mapRotation,
-              onLongPress: _onLongPress,
-              onPositionChanged: (pos, hasGesture) {
-                if (hasGesture) {
-                  // User manually panned — stop auto-follow.
-                  setState(() => _followVessel = false);
-                }
-              },
+          // Map
+          RepaintBoundary(
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter:
+                    vessel.position ?? const LatLng(57.7089, 11.9746),
+                initialZoom: 13,
+                initialRotation: mapRotation,
+                onLongPress: _onLongPress,
+                onPositionChanged: (pos, hasGesture) {
+                  if (hasGesture) {
+                    setState(() => _followVessel = false);
+                  }
+                },
+              ),
+              children: [
+                _baseLayer.tileLayer,
+                _seaLayer.tileLayer,
+                RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
+                RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
+                RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
+              ],
             ),
-            children: [
-              _baseLayer.tileLayer,
-              _seaLayer.tileLayer,
-              RouteLayer(mapRotation: mapRotation),
-              AisLayer(mapRotation: mapRotation),
-              VesselLayer(mapRotation: mapRotation),
-            ],
           ),
+
           // Scale bar overlay.
           Builder(
             builder: (context) {
               return ScaleBarLayer(camera: _mapController.camera);
             },
           ),
+
           // Route navigation overlay (XTE, bearing, distance, ETA).
           if (navData != null)
             Positioned(
-              bottom: 16,
+              bottom: _instrumentsVisible ? 220 : 16,
               left: 16,
               right: 80,
               child: _RouteNavOverlay(navData: navData),
             ),
-          // Course-up toggle.
+
+          // Top-right controls: connection dot, night mode, course-up
           Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
+            top: topPadding + 8,
             right: 8,
-            child: FloatingActionButton.small(
-              heroTag: 'courseUp',
-              onPressed: () {
-                final toggled = !ref.read(courseUpProvider);
-                ref.read(courseUpProvider.notifier).state = toggled;
-                if (!toggled) {
-                  _mapController.rotate(0);
-                }
-              },
-              child: Icon(
-                courseUp ? Icons.navigation : Icons.navigation_outlined,
+            child: Column(
+              children: [
+                // Connection status dot
+                Container(
+                  width: 28,
+                  height: 28,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.5),
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: connectionState == NmeaConnectionState.connected
+                            ? Colors.green
+                            : connectionState ==
+                                        NmeaConnectionState.connecting ||
+                                    connectionState ==
+                                        NmeaConnectionState.reconnecting
+                                ? Colors.amber
+                                : Colors.red,
+                      ),
+                    ),
+                  ),
+                ),
+                // Night mode toggle
+                FloatingActionButton.small(
+                  heroTag: 'nightMode',
+                  onPressed: () {
+                    ref.read(appSettingsProvider.notifier).toggleNightMode();
+                  },
+                  child: Icon(
+                    settings.nightMode
+                        ? Icons.dark_mode
+                        : Icons.dark_mode_outlined,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Course-up toggle
+                FloatingActionButton.small(
+                  heroTag: 'courseUp',
+                  onPressed: () {
+                    final toggled = !ref.read(courseUpProvider);
+                    ref.read(courseUpProvider.notifier).state = toggled;
+                    if (!toggled) {
+                      _mapController.rotate(0);
+                    }
+                  },
+                  child: Icon(
+                    courseUp ? Icons.navigation : Icons.navigation_outlined,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Instrument panel toggle (bottom center)
+          Positioned(
+            bottom: _instrumentsVisible ? 200 : 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: GestureDetector(
+                onTap: () =>
+                    setState(() => _instrumentsVisible = !_instrumentsVisible),
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity != null) {
+                    if (details.primaryVelocity! < 0) {
+                      // Swipe up — show
+                      setState(() => _instrumentsVisible = true);
+                    } else {
+                      // Swipe down — hide
+                      setState(() => _instrumentsVisible = false);
+                    }
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _instrumentsVisible
+                        ? Icons.keyboard_arrow_down
+                        : Icons.keyboard_arrow_up,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
               ),
             ),
           ),
+
+          // Slide-up instrument panel
+          if (_instrumentsVisible)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: GestureDetector(
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity != null &&
+                      details.primaryVelocity! > 0) {
+                    setState(() => _instrumentsVisible = false);
+                  }
+                },
+                child: const InstrumentPanel(),
+              ),
+            ),
+
+          // CPA alarm red flash overlay
+          if (_cpaAlarmFlash)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  color: Colors.red.withValues(alpha: 0.25),
+                ),
+              ),
+            ),
         ],
       ),
       // Centre-on-vessel FAB.

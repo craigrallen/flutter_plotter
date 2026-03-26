@@ -1,7 +1,9 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/nav/geo.dart';
 import '../../../data/providers/vessel_provider.dart';
 
 /// Renders the own-vessel icon on the chart.
@@ -20,18 +22,45 @@ class VesselLayer extends ConsumerWidget {
 
     final cogRad = (vessel.cog ?? 0) * pi / 180;
 
-    return MarkerLayer(
-      markers: [
-        Marker(
-          point: pos,
-          width: 40,
-          height: 40,
-          child: Transform.rotate(
-            // Rotate arrow by COG, compensate for map rotation so icon
-            // always points in the correct geographic direction.
-            angle: cogRad - mapRotation * pi / 180,
-            child: const _VesselArrow(),
+    // Compute accuracy ring radius in pixels.
+    final accuracy = vessel.gpsAccuracy;
+    double? ringRadiusPx;
+    if (accuracy != null && accuracy > 0) {
+      final camera = MapCamera.of(context);
+      final centre = camera.project(pos);
+      final offset = destinationPoint(pos, 90, accuracy);
+      final edgePx = camera.project(offset);
+      ringRadiusPx = (edgePx.x - centre.x).abs();
+      if (ringRadiusPx < 20) ringRadiusPx = null; // too small to bother
+    }
+
+    return Stack(
+      children: [
+        if (ringRadiusPx != null)
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: pos,
+                radius: ringRadiusPx,
+                useRadiusInMeter: false,
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderColor: Colors.blue.withValues(alpha: 0.4),
+                borderStrokeWidth: 1,
+              ),
+            ],
           ),
+        MarkerLayer(
+          markers: [
+            Marker(
+              point: pos,
+              width: 40,
+              height: 40,
+              child: Transform.rotate(
+                angle: cogRad - mapRotation * pi / 180,
+                child: const _VesselArrow(),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -66,7 +95,7 @@ class _ArrowPainter extends CustomPainter {
     final cy = size.height / 2;
 
     // Arrow pointing up (north) — tip at top, base at bottom.
-    final path = Path()
+    final path = ui.Path()
       ..moveTo(cx, cy - 16) // tip
       ..lineTo(cx + 10, cy + 12) // bottom right
       ..lineTo(cx, cy + 6) // notch

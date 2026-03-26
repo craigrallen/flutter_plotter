@@ -7,6 +7,8 @@ import '../../core/nmea/sentences/rmc.dart';
 import '../../core/nmea/sentences/gll.dart';
 import '../../core/nmea/sentences/vtg.dart';
 import '../../core/nmea/sentences/hdt.dart';
+import '../../core/nmea/sentences/dbt.dart';
+import '../../core/nmea/sentences/mwv.dart';
 import 'ais_provider.dart';
 import 'vessel_provider.dart';
 
@@ -78,6 +80,12 @@ final nmeaConnectionStateProvider =
   return stream.connectionState;
 });
 
+/// Exposes raw NMEA sentences as a broadcast stream for debug view.
+final nmeaRawSentencesProvider = StreamProvider<String>((ref) {
+  final stream = ref.watch(nmeaStreamProvider);
+  return stream.sentences;
+});
+
 /// Manages NMEA sentence processing — routes parsed data to vessel and AIS providers.
 final nmeaProcessorProvider = Provider<void>((ref) {
   final stream = ref.watch(nmeaStreamProvider);
@@ -117,6 +125,20 @@ final nmeaProcessorProvider = Provider<void>((ref) {
         final hdt = HdtData.fromSentence(sentence);
         if (hdt != null) {
           vesselNotifier.updateFromNmea(heading: hdt.headingTrue);
+        }
+      case 'DBT':
+        final dbt = DbtData.fromSentence(sentence);
+        if (dbt != null && dbt.depthMetres != null) {
+          vesselNotifier.updateFromNmea(depth: dbt.depthMetres);
+        }
+      case 'MWV':
+        final mwv = MwvData.fromSentence(sentence);
+        if (mwv != null && mwv.isValid) {
+          vesselNotifier.updateFromNmea(
+            windSpeed: mwv.windSpeedKnots,
+            windAngle: mwv.windAngle,
+            windIsRelative: mwv.isRelative,
+          );
         }
       case 'VDM':
       case 'VDO':

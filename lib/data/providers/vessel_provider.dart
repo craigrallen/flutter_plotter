@@ -38,8 +38,14 @@ class VesselNotifier extends StateNotifier<VesselState> {
           sog: pos.speed * 1.94384, // m/s → knots
           cog: pos.heading,
           heading: pos.heading,
+          gpsAccuracy: pos.accuracy,
           source: PositionSource.deviceGps,
           timestamp: pos.timestamp,
+          // Preserve instrument data from NMEA
+          depth: state.depth,
+          windSpeed: state.windSpeed,
+          windAngle: state.windAngle,
+          windIsRelative: state.windIsRelative,
         );
       },
     );
@@ -52,6 +58,10 @@ class VesselNotifier extends StateNotifier<VesselState> {
     double? sog,
     double? cog,
     double? heading,
+    double? depth,
+    double? windSpeed,
+    double? windAngle,
+    bool? windIsRelative,
   }) {
     _lastNmeaUpdate = DateTime.now();
 
@@ -65,6 +75,10 @@ class VesselNotifier extends StateNotifier<VesselState> {
       sog: sog ?? state.sog,
       cog: cog ?? state.cog,
       heading: heading ?? state.heading,
+      depth: depth ?? state.depth,
+      windSpeed: windSpeed ?? state.windSpeed,
+      windAngle: windAngle ?? state.windAngle,
+      windIsRelative: windIsRelative ?? state.windIsRelative,
       source: PositionSource.nmeaGps,
       timestamp: DateTime.now(),
     );

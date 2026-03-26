@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:latlong2/latlong.dart';
 
 enum PositionSource { none, deviceGps, nmeaGps }
@@ -7,6 +8,11 @@ class VesselState {
   final double? sog; // knots
   final double? cog; // degrees true
   final double? heading; // degrees true
+  final double? depth; // metres (below transducer)
+  final double? windSpeed; // knots
+  final double? windAngle; // degrees
+  final bool windIsRelative;
+  final double? gpsAccuracy; // metres
   final PositionSource source;
   final DateTime? timestamp;
 
@@ -15,15 +21,32 @@ class VesselState {
     this.sog,
     this.cog,
     this.heading,
+    this.depth,
+    this.windSpeed,
+    this.windAngle,
+    this.windIsRelative = true,
+    this.gpsAccuracy,
     this.source = PositionSource.none,
     this.timestamp,
   });
+
+  /// VMG (Velocity Made Good) towards wind.
+  /// Positive = making good progress upwind/downwind.
+  double? get vmg {
+    if (sog == null || windAngle == null) return null;
+    return sog! * cos(windAngle! * pi / 180);
+  }
 
   VesselState copyWith({
     LatLng? position,
     double? sog,
     double? cog,
     double? heading,
+    double? depth,
+    double? windSpeed,
+    double? windAngle,
+    bool? windIsRelative,
+    double? gpsAccuracy,
     PositionSource? source,
     DateTime? timestamp,
   }) {
@@ -32,6 +55,11 @@ class VesselState {
       sog: sog ?? this.sog,
       cog: cog ?? this.cog,
       heading: heading ?? this.heading,
+      depth: depth ?? this.depth,
+      windSpeed: windSpeed ?? this.windSpeed,
+      windAngle: windAngle ?? this.windAngle,
+      windIsRelative: windIsRelative ?? this.windIsRelative,
+      gpsAccuracy: gpsAccuracy ?? this.gpsAccuracy,
       source: source ?? this.source,
       timestamp: timestamp ?? this.timestamp,
     );

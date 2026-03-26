@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'data/providers/settings_provider.dart';
 import 'ui/shared/app_shell.dart';
 import 'ui/shared/theme.dart';
 
@@ -8,15 +9,18 @@ void main() {
   runApp(const ProviderScope(child: FlutterPlotterApp()));
 }
 
-class FlutterPlotterApp extends StatelessWidget {
+class FlutterPlotterApp extends ConsumerWidget {
   const FlutterPlotterApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final nightMode = ref.watch(
+      appSettingsProvider.select((s) => s.nightMode),
+    );
+
     return MaterialApp(
       title: 'FlutterPlotter',
-      theme: dayTheme,
-      darkTheme: nightTheme,
+      theme: nightMode ? nightTheme : dayTheme,
       home: const AppShell(),
       debugShowCheckedModeBanner: false,
     );
