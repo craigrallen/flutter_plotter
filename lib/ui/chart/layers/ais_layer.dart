@@ -1,0 +1,214 @@
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import '../../../core/ais/messages/static_voyage.dart';
+import '../../../core/nav/geo.dart';
+import '../../../data/models/ais_target.dart';
+import '../../../data/providers/ais_provider.dart';
+import '../../../data/providers/vessel_provider.dart';
+
+/// Renders AIS targets on the chart as colour-coded icons with COG vector lines.
+class AisLayer extends ConsumerWidget {
+  final double mapRotation;
+
+  const AisLayer({super.key, this.mapRotation = 0});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final targets = ref.watch(aisProvider);
+    final vessel = ref.watch(vesselProvider);
+
+    if (targets.isEmpty) return const SizedBox.shrink();
+
+    final markers = <Marker>[];
+    final polylines = <Polyline>[];
+
+    for (final target in targets.values) {
+      if (target.isStale) continue;
+
+      // Compute CPA/threat level
+      CpaResult? cpa;
+      if (vessel.position != null) {
+        cpa = target.computeCpa(
+          vessel.position!,
+          vessel.sog ?? 0,
+          vessel.cog ?? 0,
+        );
+      }
+      final threat = cpa?.threatLevel ?? ThreatLevel.safe;
+      final color = _threatColor(threat);
+
+      // COG vector line (5 min projection)
+      if (target.sogKnots > 0.5) {
+        final distNm = target.sogKnots * 5 / 60; // 5 minutes
+        final endPoint = destinationPoint(
+          target.position,
+          target.cogDegrees,
+          distNm * 1852,
+        );
+        polylines.add(Polyline(
+          points: [target.position, endPoint],
+          color: color.withValues(alpha: 0.7),
+          strokeWidth: 2,
+        ));
+      }
+
+      // Target marker
+      markers.add(Marker(
+        point: target.position,
+        width: 32,
+        height: 32,
+        child: GestureDetector(
+          onTap: () => _showTargetSheet(context, target, cpa),
+          child: Transform.rotate(
+            angle: (target.cogDegrees * pi / 180) - (mapRotation * pi / 180),
+            child: _TargetIcon(color: color, isAtoN: target.isAtoN),
+          ),
+        ),
+      ));
+    }
+
+    return Stack(
+      children: [
+        if (polylines.isNotEmpty) PolylineLayer(polylines: polylines),
+        MarkerLayer(markers: markers),
+      ],
+    );
+  }
+
+  Color _threatColor(ThreatLevel level) {
+    switch (level) {
+      case ThreatLevel.safe:
+        return Colors.green;
+      case ThreatLevel.caution:
+        return Colors.orange;
+      case ThreatLevel.danger:
+        return Colors.red;
+    }
+  }
+
+  void _showTargetSheet(BuildContext context, AisTarget target, CpaResult? cpa) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => _TargetDetailSheet(target: target, cpa: cpa),
+    );
+  }
+}
+
+class _TargetIcon extends StatelessWidget {
+  final Color color;
+  final bool isAtoN;
+
+  const _TargetIcon({required this.color, this.isAtoN = false});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isAtoN) {
+      return Icon(Icons.location_on, color: color, size: 24);
+    }
+    return CustomPaint(
+      size: const Size(32, 32),
+      painter: _TargetPainter(color: color),
+    );
+  }
+}
+
+class _TargetPainter extends CustomPainter {
+  final Color color;
+
+  _TargetPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final outline = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+
+    // Triangle pointing up (north direction)
+    final path = ui.Path()
+      ..moveTo(cx, cy - 12)
+      ..lineTo(cx + 8, cy + 8)
+      ..lineTo(cx - 8, cy + 8)
+      ..close();
+
+    canvas.drawPath(path, paint);
+    canvas.drawPath(path, outline);
+  }
+
+  @override
+  bool shouldRepaint(_TargetPainter old) => old.color != color;
+}
+
+class _TargetDetailSheet extends StatelessWidget {
+  final AisTarget target;
+  final CpaResult? cpa;
+
+  const _TargetDetailSheet({required this.target, this.cpa});
+
+  @override
+  Widget build(BuildContext context) {
+    final shipTypeName = target.shipType != null
+        ? AisStaticVoyage.shipTypeName(target.shipType!)
+        : 'Unknown';
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            target.displayName,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          _row('MMSI', target.mmsi.toString()),
+          if (target.callSign != null) _row('Call Sign', target.callSign!),
+          _row('Ship Type', shipTypeName),
+          _row('SOG', '${target.sogKnots.toStringAsFixed(1)} kn'),
+          _row('COG', '${target.cogDegrees.toStringAsFixed(1)}°'),
+          if (target.headingTrue != null)
+            _row('Heading', '${target.headingTrue!.toStringAsFixed(1)}°'),
+          if (cpa != null) ...[
+            const Divider(),
+            _row('CPA', '${cpa!.cpaNm.toStringAsFixed(2)} nm'),
+            _row(
+              'TCPA',
+              cpa!.tcpaMinutes < 0
+                  ? 'Diverging'
+                  : cpa!.tcpaMinutes == double.infinity
+                      ? 'N/A'
+                      : '${cpa!.tcpaMinutes.toStringAsFixed(1)} min',
+            ),
+          ],
+          if (target.lengthMetres > 0)
+            _row('Size', '${target.lengthMetres}m x ${target.beamMetres}m'),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(value),
+        ],
+      ),
+    );
+  }
+}

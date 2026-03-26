@@ -6,6 +6,7 @@ import '../../data/models/vessel_state.dart';
 import '../../data/providers/chart_tile_provider.dart';
 import '../../data/providers/vessel_provider.dart';
 import 'layers/vessel_layer.dart';
+import 'layers/ais_layer.dart';
 import 'layers/scale_bar_layer.dart';
 
 /// Whether course-up mode is active (map rotates to match COG).
@@ -76,6 +77,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             children: [
               _baseLayer.tileLayer,
               _seaLayer.tileLayer,
+              AisLayer(mapRotation: mapRotation),
               VesselLayer(mapRotation: mapRotation),
             ],
           ),
