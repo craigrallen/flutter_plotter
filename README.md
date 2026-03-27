@@ -1,6 +1,6 @@
-# FlutterPlotter
+# Floatilla
 
-Touch-first, open-source marine chart plotter built with Flutter. Designed for sailors using a tablet or phone at the helm.
+Touch-first, open-source marine chart plotter and social network for sailors, built with Flutter. Designed for sailors using a tablet or phone at the helm.
 
 ## Features
 

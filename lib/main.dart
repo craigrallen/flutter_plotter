@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/floatilla/floatilla_service.dart';
+import 'data/providers/floatilla_provider.dart';
 import 'data/providers/settings_provider.dart';
 import 'ui/onboarding/onboarding_screen.dart';
 import 'ui/shared/app_shell.dart';
 import 'ui/shared/theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: FlutterPlotterApp()));
+  await FloatillaService.instance.init();
+  runApp(const ProviderScope(child: FloatillaApp()));
 }
 
-class FlutterPlotterApp extends ConsumerWidget {
-  const FlutterPlotterApp({super.key});
+class FloatillaApp extends ConsumerWidget {
+  const FloatillaApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,8 +22,12 @@ class FlutterPlotterApp extends ConsumerWidget {
       appSettingsProvider.select((s) => s.nightMode),
     );
 
+    // Activate Floatilla background services.
+    ref.watch(floatillaLocationSharingProvider);
+    ref.watch(floatillaWsWiringProvider);
+
     return MaterialApp(
-      title: 'FlutterPlotter',
+      title: 'Floatilla',
       theme: nightMode ? nightTheme : dayTheme,
       home: const _Home(),
       debugShowCheckedModeBanner: false,

@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flutter Plotter</string>
+	<string>Floatilla</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>flutter_plotter</string>
+	<string>Floatilla</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -48,9 +48,9 @@
 		</dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>FlutterPlotter needs your location to show your vessel position on the chart.</string>
+	<string>Floatilla needs your location to show your vessel position on the chart.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>FlutterPlotter needs your location to show your vessel position on the chart.</string>
+	<string>Floatilla needs your location to show your vessel position on the chart.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

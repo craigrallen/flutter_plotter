@@ -5,6 +5,7 @@ import '../../core/signalk/signalk_discovery.dart';
 import '../../core/signalk/signalk_source.dart';
 import '../../data/providers/data_source_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
+import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/routing_api_provider.dart';
 import '../../data/providers/settings_provider.dart';
 import '../../data/providers/signalk_provider.dart';
@@ -27,6 +28,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _skHostController = TextEditingController();
   final _skPortController = TextEditingController();
   final _skTokenController = TextEditingController();
+  final _floatillaUsernameController = TextEditingController();
+  final _floatillaPasswordController = TextEditingController();
+  final _floatillaServerController = TextEditingController();
   bool _initialized = false;
   bool _scanning = false;
 
@@ -37,6 +41,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _skHostController.dispose();
     _skPortController.dispose();
     _skTokenController.dispose();
+    _floatillaUsernameController.dispose();
+    _floatillaPasswordController.dispose();
+    _floatillaServerController.dispose();
     super.dispose();
   }
 
@@ -56,6 +63,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _skPortController.text =
           dataSource.isSignalK ? dataSource.port.toString() : '3000';
       _skTokenController.text = dataSource.token ?? '';
+      _floatillaServerController.text = ref.read(floatillaServerUrlProvider);
       _initialized = true;
     }
 
@@ -341,6 +349,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const Divider(height: 40),
 
+          // ── Floatilla Social ──
+          Text('Floatilla Social',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          _FloatillaSocialSection(
+            serverController: _floatillaServerController,
+            usernameController: _floatillaUsernameController,
+            passwordController: _floatillaPasswordController,
+          ),
+
+          const Divider(height: 40),
+
           // ── Display ──
           Text('Display', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -590,6 +611,134 @@ class _ApiRoutingSectionState extends ConsumerState<_ApiRoutingSection> {
         ),
       ],
     );
+  }
+}
+
+class _FloatillaSocialSection extends ConsumerStatefulWidget {
+  final TextEditingController serverController;
+  final TextEditingController usernameController;
+  final TextEditingController passwordController;
+
+  const _FloatillaSocialSection({
+    required this.serverController,
+    required this.usernameController,
+    required this.passwordController,
+  });
+
+  @override
+  ConsumerState<_FloatillaSocialSection> createState() =>
+      _FloatillaSocialSectionState();
+}
+
+class _FloatillaSocialSectionState
+    extends ConsumerState<_FloatillaSocialSection> {
+  bool _loggingIn = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final service = ref.watch(floatillaServiceProvider);
+    final loggedIn = ref.watch(isLoggedInProvider);
+    final autoShare = ref.watch(floatillaAutoShareProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: widget.serverController,
+          decoration: const InputDecoration(
+            labelText: 'Server URL',
+            hintText: 'https://fleet.floatilla.app',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (v) {
+            final url = v.trim();
+            ref.read(floatillaServerUrlProvider.notifier).state = url;
+            service.baseUrl = url;
+          },
+        ),
+        const SizedBox(height: 16),
+
+        if (!loggedIn) ...[
+          TextField(
+            controller: widget.usernameController,
+            decoration: const InputDecoration(
+              labelText: 'Username',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: widget.passwordController,
+            decoration: const InputDecoration(
+              labelText: 'Password',
+              border: OutlineInputBorder(),
+            ),
+            obscureText: true,
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loggingIn ? null : _login,
+            icon: _loggingIn
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.login),
+            label: Text(_loggingIn ? 'Logging in...' : 'Log In'),
+          ),
+        ] else ...[
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: Text(service.username ?? 'Logged in'),
+            subtitle: service.vesselName != null
+                ? Text(service.vesselName!)
+                : null,
+          ),
+          SwitchListTile(
+            title: const Text('Auto-share position when underway'),
+            subtitle: const Text('Updates every 60s when SOG > 0.5 kn'),
+            value: autoShare,
+            onChanged: (v) {
+              ref.read(floatillaAutoShareProvider.notifier).state = v;
+            },
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.logout),
+            label: const Text('Log Out'),
+            onPressed: () async {
+              await service.logout();
+              ref.read(isLoggedInProvider.notifier).state = false;
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _login() async {
+    final username = widget.usernameController.text.trim();
+    final password = widget.passwordController.text.trim();
+    if (username.isEmpty || password.isEmpty) return;
+
+    setState(() => _loggingIn = true);
+    try {
+      final service = ref.read(floatillaServiceProvider);
+      final ok = await service.login(username, password);
+      if (mounted) {
+        if (ok) {
+          ref.read(isLoggedInProvider.notifier).state = true;
+          widget.passwordController.clear();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login failed')),
+          );
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _loggingIn = false);
+    }
   }
 }
 

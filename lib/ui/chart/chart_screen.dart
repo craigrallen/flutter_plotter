@@ -16,7 +16,9 @@ import '../../data/providers/route_provider.dart';
 import '../../data/providers/settings_provider.dart';
 import '../../data/providers/vessel_provider.dart';
 import '../../data/providers/weather_provider.dart';
+import '../../data/providers/floatilla_provider.dart';
 import '../anchor/anchor_screen.dart';
+import 'layers/friends_layer.dart';
 import '../instruments/instrument_panel.dart';
 import '../instruments/instrument_strip.dart';
 import '../shared/spacing.dart';
@@ -47,6 +49,12 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   bool _cpaAlarmFlash = false;
   Timer? _flashTimer;
 
+  // MoB state
+  bool _mobArmed = false;
+  Timer? _mobTimer;
+  int _mobCountdown = 3;
+  bool _mobActive = false; // our own MoB triggered
+
   // Tile providers.
   final _baseLayer = OsmBaseProvider();
   final _seaLayer = OpenSeaMapProvider();
@@ -54,6 +62,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _mobTimer?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -185,6 +194,41 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     }
   }
 
+  void _onMobTap() {
+    if (_mobArmed) {
+      // Second tap — trigger MoB
+      _mobTimer?.cancel();
+      _mobArmed = false;
+      final pos = ref.read(vesselProvider).position;
+      if (pos != null) {
+        final service = ref.read(floatillaServiceProvider);
+        service.triggerMoB(pos);
+        HapticFeedback.vibrate();
+        SystemSound.play(SystemSoundType.alert);
+        setState(() => _mobActive = true);
+      }
+    } else {
+      // First tap — arm with 3s countdown
+      HapticFeedback.heavyImpact();
+      setState(() {
+        _mobArmed = true;
+        _mobCountdown = 3;
+      });
+      _mobTimer?.cancel();
+      _mobTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) {
+          t.cancel();
+          return;
+        }
+        setState(() => _mobCountdown--);
+        if (_mobCountdown <= 0) {
+          t.cancel();
+          setState(() => _mobArmed = false);
+        }
+      });
+    }
+  }
+
   void _startFlash() {
     setState(() => _cpaAlarmFlash = true);
     _flashTimer?.cancel();
@@ -297,6 +341,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               const RepaintBoundary(child: AnchorLayer()),
               const RepaintBoundary(child: AutoRoutePreviewLayer()),
               RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
+              const RepaintBoundary(child: FriendsLayer()),
               RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
             ],
           ),
@@ -478,6 +523,37 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             ),
           ),
 
+        // MoB active banner
+        if (_mobActive)
+          Positioned(
+            top: safePadding.top,
+            left: 0,
+            right: 0,
+            child: _MobActiveBanner(
+              onDismiss: () => setState(() => _mobActive = false),
+            ),
+          ),
+
+        // MoB button (bottom-left)
+        Positioned(
+          bottom: safePadding.bottom + Spacing.md,
+          left: safePadding.left + Spacing.md,
+          child: SizedBox(
+            height: Spacing.minTapTarget,
+            child: FloatingActionButton.extended(
+              heroTag: 'mob',
+              backgroundColor: _mobArmed ? Colors.orange : Colors.red,
+              foregroundColor: Colors.white,
+              onPressed: _onMobTap,
+              icon: const Icon(Icons.warning),
+              label: Text(
+                _mobArmed ? 'TAP AGAIN — ${_mobCountdown}s' : 'MoB',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ),
+
         // FAB area — inside SafeArea padding
         Positioned(
           bottom: safePadding.bottom + Spacing.md,
@@ -657,6 +733,69 @@ class _RouteNavOverlay extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobActiveBanner extends StatefulWidget {
+  final VoidCallback onDismiss;
+
+  const _MobActiveBanner({required this.onDismiss});
+
+  @override
+  State<_MobActiveBanner> createState() => _MobActiveBannerState();
+}
+
+class _MobActiveBannerState extends State<_MobActiveBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        return Container(
+          color: Colors.red.withValues(alpha: 0.8 + 0.2 * _pulse.value),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: child,
+        );
+      },
+      child: Row(
+        children: [
+          const Icon(Icons.warning, color: Colors.white),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'MAN OVERBOARD ALERT ACTIVE',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
+            onPressed: widget.onDismiss,
+            child: const Text('DISMISS'),
           ),
         ],
       ),

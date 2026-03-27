@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/floatilla/floatilla_models.dart';
 import '../../core/nmea/nmea_stream.dart';
 import '../../core/signalk/signalk_source.dart';
+import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
+import '../../data/providers/route_provider.dart';
 import '../../data/providers/signalk_provider.dart';
+import '../../data/models/waypoint.dart';
 import '../chart/chart_screen.dart';
 import '../routes/route_list_screen.dart';
 import '../ais/target_list_screen.dart';
 import '../settings/settings_screen.dart';
 import '../signalk/signalk_dashboard.dart';
 import '../weather/weather_screen.dart';
+import '../floatilla/floatilla_shell.dart';
+import '../floatilla/mob_overlay.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -25,6 +31,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   static const _screens = <Widget>[
     ChartScreen(),
+    FloatillaShell(),
     RouteListScreen(),
     TargetListScreen(),
     SignalKDashboard(),
@@ -34,6 +41,24 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for incoming shared waypoints.
+    ref.listen<List<FloatillaWaypoint>>(pendingWaypointsProvider,
+        (prev, next) {
+      if (next.length > (prev?.length ?? 0)) {
+        final wp = next.last;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${wp.fromUsername} shared a waypoint: ${wp.name}'),
+            action: SnackBarAction(
+              label: 'View',
+              onPressed: () => _showWaypointAcceptDialog(context, wp),
+            ),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    });
+
     final connState = ref.watch(nmeaConnectionStateProvider);
     final skConnState = ref.watch(signalKConnectionStateProvider);
 
@@ -57,55 +82,136 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
+  void _showWaypointAcceptDialog(
+      BuildContext context, FloatillaWaypoint wp) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Waypoint from ${wp.fromUsername}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(wp.name,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 18)),
+            if (wp.description != null && wp.description!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(wp.description!),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              '${wp.position.latitude.toStringAsFixed(5)}, '
+              '${wp.position.longitude.toStringAsFixed(5)}',
+              style: Theme.of(ctx).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Remove from pending.
+              final pending = ref.read(pendingWaypointsProvider);
+              ref.read(pendingWaypointsProvider.notifier).state =
+                  pending.where((w) => w.id != wp.id).toList();
+            },
+            child: const Text('Dismiss'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.add_location),
+            label: const Text('Add to Routes'),
+            onPressed: () {
+              ref.read(waypointsProvider.notifier).add(Waypoint(
+                    name: wp.name,
+                    position: wp.position,
+                    notes: 'Shared by ${wp.fromUsername}',
+                    createdAt: wp.createdAt,
+                  ));
+              // Remove from pending.
+              final pending = ref.read(pendingWaypointsProvider);
+              ref.read(pendingWaypointsProvider.notifier).state =
+                  pending.where((w) => w.id != wp.id).toList();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Waypoint "${wp.name}" added')),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _wrapWithMobOverlay(Widget child) {
+    return Stack(
+      children: [
+        child,
+        const MobOverlay(),
+      ],
+    );
+  }
+
   /// Phone: bottom NavigationBar.
   Widget _buildCompactLayout(bool anyConnected, bool skConnected) {
-    return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: _navDestinations(anyConnected, skConnected),
+    return _wrapWithMobOverlay(
+      Scaffold(
+        body: IndexedStack(index: _selectedIndex, children: _screens),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+          destinations: _navDestinations(anyConnected, skConnected),
+        ),
       ),
     );
   }
 
   /// Medium tablet / large phone: NavigationRail on left, no bottom nav.
   Widget _buildMediumLayout(bool anyConnected, bool skConnected) {
-    return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-            labelType: NavigationRailLabelType.all,
-            destinations: _railDestinations(anyConnected, skConnected),
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: IndexedStack(index: _selectedIndex, children: _screens),
-          ),
-        ],
+    return _wrapWithMobOverlay(
+      Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) =>
+                  setState(() => _selectedIndex = i),
+              labelType: NavigationRailLabelType.all,
+              destinations: _railDestinations(anyConnected, skConnected),
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            Expanded(
+              child:
+                  IndexedStack(index: _selectedIndex, children: _screens),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// Large tablet: NavigationRail + persistent InstrumentSidebar on chart tab.
   Widget _buildExpandedLayout(bool anyConnected, bool skConnected) {
-    return Scaffold(
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-            labelType: NavigationRailLabelType.all,
-            destinations: _railDestinations(anyConnected, skConnected),
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          if (_selectedIndex == 0) const InstrumentSidebar(),
-          Expanded(
-            child: IndexedStack(index: _selectedIndex, children: _screens),
-          ),
-        ],
+    return _wrapWithMobOverlay(
+      Scaffold(
+        body: Row(
+          children: [
+            NavigationRail(
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: (i) =>
+                  setState(() => _selectedIndex = i),
+              labelType: NavigationRailLabelType.all,
+              destinations: _railDestinations(anyConnected, skConnected),
+            ),
+            const VerticalDivider(thickness: 1, width: 1),
+            if (_selectedIndex == 0) const InstrumentSidebar(),
+            Expanded(
+              child:
+                  IndexedStack(index: _selectedIndex, children: _screens),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -114,6 +220,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       bool anyConnected, bool skConnected) {
     return [
       const NavigationDestination(icon: Icon(Icons.map), label: 'Chart'),
+      const NavigationDestination(
+          icon: Icon(Icons.groups), label: 'Floatilla'),
       const NavigationDestination(icon: Icon(Icons.route), label: 'Routes'),
       NavigationDestination(
         icon: Badge(
@@ -142,6 +250,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     return [
       const NavigationRailDestination(
           icon: Icon(Icons.map), label: Text('Chart')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.groups), label: Text('Floatilla')),
       const NavigationRailDestination(
           icon: Icon(Icons.route), label: Text('Routes')),
       NavigationRailDestination(

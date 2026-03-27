@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_plotter/main.dart';
+import 'package:floatilla/main.dart';
 
 void main() {
   testWidgets('App renders', (WidgetTester tester) async {
-    await tester.pumpWidget(const FlutterPlotterApp());
+    await tester.pumpWidget(const FloatillaApp());
     expect(find.text('Chart'), findsOneWidget);
   });
 }
