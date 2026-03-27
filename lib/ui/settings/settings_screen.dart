@@ -5,10 +5,13 @@ import '../../core/signalk/signalk_discovery.dart';
 import '../../core/signalk/signalk_source.dart';
 import '../../data/providers/data_source_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
+import '../../data/providers/routing_api_provider.dart';
 import '../../data/providers/settings_provider.dart';
 import '../../data/providers/signalk_provider.dart';
+import '../../data/providers/vessel_profile_provider.dart';
 import 'nmea_debug_screen.dart';
 import 'offline_tiles_screen.dart';
+import 'vessel_profile_editor.dart';
 
 /// Settings screen with NMEA connection, alarms, units, and debug options.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -302,6 +305,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           const Divider(height: 40),
 
+          // ── Vessel Profile ──
+          Text('Vessel Profile',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          Consumer(builder: (context, ref, _) {
+            final profile = ref.watch(vesselProfileProvider);
+            return ListTile(
+              leading: const Icon(Icons.sailing),
+              title: Text(profile.name),
+              subtitle: Text(
+                'Draft ${profile.draft}m · Air draft ${profile.airDraft}m · '
+                'Beam ${profile.beam}m · LOA ${profile.length}m',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const VesselProfileEditor()),
+                );
+              },
+            );
+          }),
+
+          const Divider(height: 40),
+
+          // ── API Routing ──
+          Text('API Routing',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+
+          const _ApiRoutingSection(),
+
+          const Divider(height: 40),
+
           // ── Display ──
           Text('Display', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
@@ -485,6 +524,70 @@ class _SignalKStatusIndicator extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         Text(label),
+      ],
+    );
+  }
+}
+
+class _ApiRoutingSection extends ConsumerStatefulWidget {
+  const _ApiRoutingSection();
+
+  @override
+  ConsumerState<_ApiRoutingSection> createState() => _ApiRoutingSectionState();
+}
+
+class _ApiRoutingSectionState extends ConsumerState<_ApiRoutingSection> {
+  final _orsKeyController = TextEditingController();
+  final _navKeyController = TextEditingController();
+  bool _initialized = false;
+
+  @override
+  void dispose() {
+    _orsKeyController.dispose();
+    _navKeyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final apiConfig = ref.watch(routingApiProvider);
+
+    if (!_initialized) {
+      _orsKeyController.text = apiConfig.orsApiKey;
+      _navKeyController.text = apiConfig.navionicsApiKey;
+      _initialized = true;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _orsKeyController,
+          decoration: const InputDecoration(
+            labelText: 'OpenRouteService API Key',
+            hintText: 'Optional — for API routing engine',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (v) {
+            ref.read(routingApiProvider.notifier).update(
+                  apiConfig.copyWith(orsApiKey: v.trim()),
+                );
+          },
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _navKeyController,
+          decoration: const InputDecoration(
+            labelText: 'Navionics API Key',
+            hintText: 'Optional — for Navionics routing',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: (v) {
+            ref.read(routingApiProvider.notifier).update(
+                  apiConfig.copyWith(navionicsApiKey: v.trim()),
+                );
+          },
+        ),
       ],
     );
   }

@@ -25,8 +25,10 @@ import 'layers/tide_layer.dart';
 import 'layers/vessel_layer.dart';
 import 'layers/ais_layer.dart';
 import 'layers/route_layer.dart';
+import 'layers/auto_route_preview_layer.dart';
 import 'layers/scale_bar_layer.dart';
 import 'layers/weather_layer.dart';
+import '../routing/auto_route_screen.dart';
 
 /// Whether course-up mode is active (map rotates to match COG).
 final courseUpProvider = StateProvider<bool>((ref) => false);
@@ -66,7 +68,41 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
 
   void _onLongPress(TapPosition tapPos, LatLng position) {
     HapticFeedback.mediumImpact();
-    _showAddWaypointDialog(position);
+    _showLongPressMenu(tapPos, position);
+  }
+
+  void _showLongPressMenu(TapPosition tapPos, LatLng position) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.add_location),
+              title: const Text('Add Waypoint'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showAddWaypointDialog(position);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.route),
+              title: const Text('Auto-route to here'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AutoRouteScreen(destination: position),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showAddWaypointDialog(LatLng position) {
@@ -259,6 +295,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               const RepaintBoundary(child: TideLayer()),
               RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
               const RepaintBoundary(child: AnchorLayer()),
+              const RepaintBoundary(child: AutoRoutePreviewLayer()),
               RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
               RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
             ],

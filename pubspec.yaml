@@ -51,6 +51,7 @@ dependencies:
   web_socket_channel: ^2.4.0
   multicast_dns: ^0.3.2
   http: ^1.2.0
+  image: ^4.0.0
   audioplayers: ^6.0.0
   flutter_local_notifications: ^17.0.0
 
