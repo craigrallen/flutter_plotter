@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/floatilla/floatilla_service.dart';
 import '../../data/providers/floatilla_provider.dart';
 import 'feed_screen.dart';
 import 'floatilla_auth_screen.dart';
@@ -41,9 +42,49 @@ class _FloatillaShellState extends ConsumerState<FloatillaShell>
       );
     }
 
+    final username = FloatillaService.instance.username;
+    final vesselName = FloatillaService.instance.vesselName;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Floatilla'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Floatilla'),
+            if (username != null)
+              Text(
+                vesselName != null ? '$vesselName · @$username' : '@$username',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+              ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign out',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Sign out'),
+                  content: const Text('Sign out of Floatilla?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Sign out')),
+                  ],
+                ),
+              );
+              if (confirm == true && context.mounted) {
+                await FloatillaService.instance.logout();
+                ref.read(isLoggedInProvider.notifier).state = false;
+              }
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: [

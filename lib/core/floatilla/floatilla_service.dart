@@ -164,27 +164,48 @@ class FloatillaService {
 
   Future<bool> sendFriendRequest(String username) async {
     final resp = await http.post(
-      Uri.parse('$baseUrl/friends/request'),
+      Uri.parse('$baseUrl/friends/add'),
       headers: _authHeaders,
       body: jsonEncode({'username': username}),
     );
     return resp.statusCode == 200 || resp.statusCode == 201;
   }
 
-  Future<bool> acceptFriendRequest(String userId) async {
+  Future<bool> acceptFriendRequest(String friendshipId) async {
     final resp = await http.post(
       Uri.parse('$baseUrl/friends/accept'),
       headers: _authHeaders,
-      body: jsonEncode({'userId': userId}),
+      body: jsonEncode({'friendshipId': friendshipId}),
     );
     return resp.statusCode == 200;
+  }
+
+  Future<bool> removeFriend(int friendId) async {
+    final resp = await http.post(
+      Uri.parse('$baseUrl/friends/remove'),
+      headers: _authHeaders,
+      body: jsonEncode({'friendId': friendId}),
+    );
+    return resp.statusCode == 200;
+  }
+
+  Future<List<FloatillaFriendRequest>> getFriendRequests() async {
+    final resp = await http.get(
+      Uri.parse('$baseUrl/friends/requests'),
+      headers: _authHeaders,
+    );
+    if (resp.statusCode != 200) return [];
+    final list = jsonDecode(resp.body) as List;
+    return list
+        .map((e) => FloatillaFriendRequest.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   // ── Location ──────────────────────────────────────────────
 
   Future<void> updateLocation(LatLng pos, double sog, double cog) async {
-    await http.put(
-      Uri.parse('$baseUrl/location'),
+    await http.post(
+      Uri.parse('$baseUrl/users/location'),
       headers: _authHeaders,
       body: jsonEncode({
         'lat': pos.latitude,

@@ -19,9 +19,9 @@ class FloatillaUser {
 
   factory FloatillaUser.fromJson(Map<String, dynamic> json) {
     return FloatillaUser(
-      id: json['id'] as String,
+      id: json['id'].toString(),
       username: json['username'] as String,
-      vesselName: json['vesselName'] as String? ?? '',
+      vesselName: (json['vesselName'] ?? json['vessel_name'] ?? '') as String,
       position: json['lat'] != null && json['lng'] != null
           ? LatLng(
               (json['lat'] as num).toDouble(),
@@ -55,7 +55,7 @@ class FloatillaMessage {
 
   factory FloatillaMessage.fromJson(Map<String, dynamic> json) {
     return FloatillaMessage(
-      id: json['id'] as String,
+      id: json['id'].toString(),
       authorId: json['authorId'] as String,
       authorUsername: json['authorUsername'] as String,
       text: json['text'] as String,
@@ -91,7 +91,7 @@ class FloatillaWaypoint {
 
   factory FloatillaWaypoint.fromJson(Map<String, dynamic> json) {
     return FloatillaWaypoint(
-      id: json['id'] as String,
+      id: json['id'].toString(),
       fromUserId: json['fromUserId'] as String,
       fromUsername: json['fromUsername'] as String,
       position: LatLng(
@@ -124,12 +124,39 @@ class MobAlert {
     return MobAlert(
       userId: json['userId'] as String,
       username: json['username'] as String,
-      vesselName: json['vesselName'] as String? ?? '',
+      vesselName: (json['vesselName'] ?? json['vessel_name'] ?? '') as String,
       position: LatLng(
         (json['lat'] as num).toDouble(),
         (json['lng'] as num).toDouble(),
       ),
       triggeredAt: DateTime.parse(json['triggeredAt'] as String),
+    );
+  }
+}
+
+// ── Friend request ────────────────────────────────────────
+
+class FloatillaFriendRequest {
+  final int friendshipId;
+  final String userId;
+  final String username;
+  final String vesselName;
+
+  const FloatillaFriendRequest({
+    required this.friendshipId,
+    required this.userId,
+    required this.username,
+    required this.vesselName,
+  });
+
+  factory FloatillaFriendRequest.fromJson(Map<String, dynamic> json) {
+    return FloatillaFriendRequest(
+      friendshipId: json['friendship_id'] is int
+          ? json['friendship_id'] as int
+          : int.parse(json['friendship_id'].toString()),
+      userId: json['id'].toString(),
+      username: json['username'] as String,
+      vesselName: json['vessel_name'] as String? ?? '',
     );
   }
 }
