@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/floatilla/floatilla_service.dart';
 import '../../data/providers/floatilla_provider.dart';
@@ -57,11 +58,16 @@ class _FloatillaAuthScreenState extends ConsumerState<FloatillaAuthScreen>
       setState(() => _error = 'Enter username and password');
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final ok = await FloatillaService.instance.login(username, password);
       if (!mounted) return;
       if (ok) {
+        // Tell the autofill framework to save these credentials
+        TextInput.finishAutofillContext();
         ref.read(isLoggedInProvider.notifier).state = true;
       } else {
         setState(() => _error = 'Invalid username or password');
@@ -96,18 +102,79 @@ class _FloatillaAuthScreenState extends ConsumerState<FloatillaAuthScreen>
       return;
     }
 
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final ok =
           await FloatillaService.instance.register(username, vessel, password);
       if (!mounted) return;
       if (ok) {
+        // Tell the autofill framework to save the new credentials
+        TextInput.finishAutofillContext();
         ref.read(isLoggedInProvider.notifier).state = true;
       } else {
         setState(() => _error = 'Username already taken or server error');
       }
     } catch (e) {
       if (mounted) setState(() => _error = 'Connection error — check server');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final usernameOrEmail = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController();
+        return AlertDialog(
+          title: const Text('Reset password'),
+          content: TextField(
+            controller: ctrl,
+            autofillHints: const [AutofillHints.username, AutofillHints.email],
+            decoration: const InputDecoration(
+              labelText: 'Username or email',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => Navigator.of(ctx).pop(ctrl.text.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: const Text('Send reset link'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (usernameOrEmail == null || usernameOrEmail.isEmpty) return;
+    if (!mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      await FloatillaService.instance.requestPasswordReset(usernameOrEmail);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('If that account exists, a reset link has been sent'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not connect to server')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -144,6 +211,7 @@ class _FloatillaAuthScreenState extends ConsumerState<FloatillaAuthScreen>
                     setState(() => _obscureLogin = !_obscureLogin),
                 loading: _loading,
                 onSubmit: _login,
+                onForgotPassword: _forgotPassword,
               ),
               _RegisterTab(
                 usernameCtrl: _regUsernameCtrl,
@@ -177,6 +245,7 @@ class _LoginTab extends StatelessWidget {
     required this.onToggleObscure,
     required this.loading,
     required this.onSubmit,
+    required this.onForgotPassword,
   });
 
   final TextEditingController usernameCtrl;
@@ -185,66 +254,82 @@ class _LoginTab extends StatelessWidget {
   final VoidCallback onToggleObscure;
   final bool loading;
   final VoidCallback onSubmit;
+  final VoidCallback onForgotPassword;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 16),
-          const Icon(Icons.sailing, size: 56, color: Colors.blueAccent),
-          const SizedBox(height: 16),
-          const Text('Welcome back',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          const Text('Log in to see your fleet and friends',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey)),
-          const SizedBox(height: 32),
-          TextField(
-            controller: usernameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              prefixIcon: Icon(Icons.person_outline),
-              border: OutlineInputBorder(),
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 16),
+            const Icon(Icons.sailing, size: 56, color: Colors.blueAccent),
+            const SizedBox(height: 16),
+            const Text('Welcome back',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('Log in to see your fleet and friends',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 32),
+            TextField(
+              controller: usernameCtrl,
+              autofillHints: const [AutofillHints.username],
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              enableSuggestions: false,
             ),
-            textInputAction: TextInputAction.next,
-            autocorrect: false,
-            enableSuggestions: false,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: passwordCtrl,
-            obscureText: obscure,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: onToggleObscure,
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordCtrl,
+              autofillHints: const [AutofillHints.password],
+              obscureText: obscure,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      obscure ? Icons.visibility : Icons.visibility_off),
+                  onPressed: onToggleObscure,
+                ),
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => loading ? null : onSubmit(),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: loading ? null : onForgotPassword,
+                child: const Text('Forgot password?'),
               ),
             ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => loading ? null : onSubmit(),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: loading ? null : onSubmit,
-            style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-            child: loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Log In', style: TextStyle(fontSize: 15)),
-          ),
-        ],
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: loading ? null : onSubmit,
+              style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14)),
+              child: loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Log In', style: TextStyle(fontSize: 15)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -281,89 +366,100 @@ class _RegisterTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 16),
-          const Icon(Icons.anchor, size: 56, color: Colors.blueAccent),
-          const SizedBox(height: 16),
-          const Text('Join Floatilla',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          const Text('Create an account to connect with your fleet',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.grey)),
-          const SizedBox(height: 32),
-          TextField(
-            controller: usernameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              prefixIcon: Icon(Icons.person_outline),
-              border: OutlineInputBorder(),
-              helperText: 'Min. 3 characters',
-            ),
-            textInputAction: TextInputAction.next,
-            autocorrect: false,
-            enableSuggestions: false,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: vesselCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Vessel name',
-              prefixIcon: Icon(Icons.sailing),
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: passwordCtrl,
-            obscureText: obscure,
-            decoration: InputDecoration(
-              labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
-              helperText: 'Min. 6 characters',
-              suffixIcon: IconButton(
-                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: onToggleObscure,
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 16),
+            const Icon(Icons.anchor, size: 56, color: Colors.blueAccent),
+            const SizedBox(height: 16),
+            const Text('Join Floatilla',
+                textAlign: TextAlign.center,
+                style:
+                    TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('Create an account to connect with your fleet',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 32),
+            TextField(
+              controller: usernameCtrl,
+              autofillHints: const [AutofillHints.newUsername],
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+                helperText: 'Min. 3 characters',
               ),
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.next,
+              autocorrect: false,
+              enableSuggestions: false,
             ),
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: confirmCtrl,
-            obscureText: obscureConfirm,
-            decoration: InputDecoration(
-              labelText: 'Confirm password',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
-              suffixIcon: IconButton(
-                icon: Icon(
-                    obscureConfirm ? Icons.visibility : Icons.visibility_off),
-                onPressed: onToggleObscureConfirm,
+            const SizedBox(height: 16),
+            TextField(
+              controller: vesselCtrl,
+              // Not an autofill hint — vessel name is app-specific
+              decoration: const InputDecoration(
+                labelText: 'Vessel name',
+                prefixIcon: Icon(Icons.sailing),
+                border: OutlineInputBorder(),
               ),
+              textInputAction: TextInputAction.next,
             ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => loading ? null : onSubmit(),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: loading ? null : onSubmit,
-            style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-            child: loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Create Account', style: TextStyle(fontSize: 15)),
-          ),
-        ],
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordCtrl,
+              autofillHints: const [AutofillHints.newPassword],
+              obscureText: obscure,
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: const OutlineInputBorder(),
+                helperText: 'Min. 6 characters',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                      obscure ? Icons.visibility : Icons.visibility_off),
+                  onPressed: onToggleObscure,
+                ),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: confirmCtrl,
+              autofillHints: const [AutofillHints.newPassword],
+              obscureText: obscureConfirm,
+              decoration: InputDecoration(
+                labelText: 'Confirm password',
+                prefixIcon: const Icon(Icons.lock_outline),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(obscureConfirm
+                      ? Icons.visibility
+                      : Icons.visibility_off),
+                  onPressed: onToggleObscureConfirm,
+                ),
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => loading ? null : onSubmit(),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: loading ? null : onSubmit,
+              style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14)),
+              child: loading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Create Account',
+                      style: TextStyle(fontSize: 15)),
+            ),
+          ],
+        ),
       ),
     );
   }

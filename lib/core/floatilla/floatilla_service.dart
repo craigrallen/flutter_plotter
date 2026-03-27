@@ -93,6 +93,15 @@ class FloatillaService {
     return true;
   }
 
+  Future<void> requestPasswordReset(String usernameOrEmail) async {
+    await http.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'identifier': usernameOrEmail}),
+    );
+    // Fire-and-forget: always succeed from UX perspective (don't leak user existence)
+  }
+
   Future<void> logout() async {
     _intentionalClose = true;
     _ws?.sink.close();
