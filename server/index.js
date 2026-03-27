@@ -518,3 +518,4 @@ app.get('/admin/activity', adminAuth, async (req, res) => {
   `, [Math.floor(Date.now() / 1000) - 14 * 86400]);
   res.json({ messages: result.rows, newUsers: usersResult.rows });
 });
+
