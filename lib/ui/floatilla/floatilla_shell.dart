@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers/floatilla_provider.dart';
 import 'feed_screen.dart';
+import 'floatilla_auth_screen.dart';
 import 'friends_screen.dart';
 
 class FloatillaShell extends ConsumerStatefulWidget {
@@ -36,15 +37,7 @@ class _FloatillaShellState extends ConsumerState<FloatillaShell>
     if (!loggedIn) {
       return Scaffold(
         appBar: AppBar(title: const Text('Floatilla')),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Log in to Floatilla in Settings to see your fleet feed and friends.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+        body: const FloatillaAuthScreen(),
       );
     }
 
