@@ -11,6 +11,7 @@ class AppSettings {
   final double cpaAlarmDistanceNm;
   final double cpaAlarmTimeMinutes;
   final bool nmeaDebugEnabled;
+  final bool sidebarVisible;
 
   const AppSettings({
     this.nightMode = false,
@@ -18,6 +19,7 @@ class AppSettings {
     this.cpaAlarmDistanceNm = 0.5,
     this.cpaAlarmTimeMinutes = 10,
     this.nmeaDebugEnabled = false,
+    this.sidebarVisible = true,
   });
 
   AppSettings copyWith({
@@ -26,6 +28,7 @@ class AppSettings {
     double? cpaAlarmDistanceNm,
     double? cpaAlarmTimeMinutes,
     bool? nmeaDebugEnabled,
+    bool? sidebarVisible,
   }) {
     return AppSettings(
       nightMode: nightMode ?? this.nightMode,
@@ -33,6 +36,7 @@ class AppSettings {
       cpaAlarmDistanceNm: cpaAlarmDistanceNm ?? this.cpaAlarmDistanceNm,
       cpaAlarmTimeMinutes: cpaAlarmTimeMinutes ?? this.cpaAlarmTimeMinutes,
       nmeaDebugEnabled: nmeaDebugEnabled ?? this.nmeaDebugEnabled,
+      sidebarVisible: sidebarVisible ?? this.sidebarVisible,
     );
   }
 
@@ -89,6 +93,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
       cpaAlarmDistanceNm: prefs.getDouble('cpa_alarm_dist') ?? 0.5,
       cpaAlarmTimeMinutes: prefs.getDouble('cpa_alarm_time') ?? 10,
       nmeaDebugEnabled: prefs.getBool('nmea_debug') ?? false,
+      sidebarVisible: prefs.getBool('sidebar_visible') ?? true,
     );
   }
 
@@ -100,6 +105,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
     await prefs.setDouble('cpa_alarm_dist', settings.cpaAlarmDistanceNm);
     await prefs.setDouble('cpa_alarm_time', settings.cpaAlarmTimeMinutes);
     await prefs.setBool('nmea_debug', settings.nmeaDebugEnabled);
+    await prefs.setBool('sidebar_visible', settings.sidebarVisible);
   }
 
   void toggleNightMode() {
@@ -108,6 +114,10 @@ class AppSettingsNotifier extends StateNotifier<AppSettings> {
 
   void toggleNmeaDebug() {
     update(state.copyWith(nmeaDebugEnabled: !state.nmeaDebugEnabled));
+  }
+
+  void toggleSidebar() {
+    update(state.copyWith(sidebarVisible: !state.sidebarVisible));
   }
 }
 

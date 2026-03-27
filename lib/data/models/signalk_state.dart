@@ -18,12 +18,16 @@ class SignalKState {
   /// Timestamp of last delta received.
   final DateTime? lastUpdateAt;
 
+  /// Paths updated in the most recent delta — UI can highlight "live" fields.
+  final Set<String> lastUpdatedPaths;
+
   const SignalKState({
     this.ownVessel = const SignalKVesselData(),
     this.otherVessels = const {},
     this.notifications = const [],
     this.connectionState = SignalKConnectionState.disconnected,
     this.lastUpdateAt,
+    this.lastUpdatedPaths = const {},
   });
 
   SignalKState copyWith({
@@ -32,6 +36,7 @@ class SignalKState {
     List<SignalKNotification>? notifications,
     SignalKConnectionState? connectionState,
     DateTime? lastUpdateAt,
+    Set<String>? lastUpdatedPaths,
   }) {
     return SignalKState(
       ownVessel: ownVessel ?? this.ownVessel,
@@ -39,6 +44,7 @@ class SignalKState {
       notifications: notifications ?? this.notifications,
       connectionState: connectionState ?? this.connectionState,
       lastUpdateAt: lastUpdateAt ?? this.lastUpdateAt,
+      lastUpdatedPaths: lastUpdatedPaths ?? this.lastUpdatedPaths,
     );
   }
 }

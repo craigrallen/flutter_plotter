@@ -25,6 +25,9 @@ class ParsedDelta {
   // AIS vessel update (only populated when isSelf == false)
   final AisVesselData? aisVessel;
 
+  /// All Signal K paths present in this delta (for live-update tracking).
+  final Set<String> paths;
+
   const ParsedDelta({
     required this.isSelf,
     this.mmsi,
@@ -35,6 +38,7 @@ class ParsedDelta {
     this.electrical,
     this.notifications,
     this.aisVessel,
+    this.paths = const {},
   });
 }
 
@@ -90,6 +94,7 @@ class SignalKParser {
     TanksData? tankData;
     ElectricalData? elec;
     List<SignalKNotification>? notifs;
+    final paths = <String>{};
 
     for (final update in updates) {
       final values =
@@ -101,6 +106,8 @@ class SignalKParser {
         final path = entry['path'] as String?;
         final value = entry['value'];
         if (path == null) continue;
+
+        paths.add(path);
 
         if (path.startsWith('navigation.')) {
           nav = _mergeNavigation(nav, path, value);
@@ -129,6 +136,7 @@ class SignalKParser {
       electrical: elec,
       notifications:
           notifs != null ? NotificationsData(notifications: notifs) : null,
+      paths: paths,
     );
   }
 

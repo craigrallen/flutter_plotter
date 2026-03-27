@@ -11,12 +11,16 @@ import '../models/signalk_state.dart';
 /// Consumes the raw delta stream from [SignalKSource], parses each delta
 /// via [SignalKParser], and maintains a full [SignalKState] including
 /// own vessel data, AIS targets, and notifications.
+///
+/// Each incoming delta immediately emits a state update — no batching.
 class SignalKNotifier extends StateNotifier<SignalKState> {
   SignalKSource? _source;
   final SignalKParser _parser = SignalKParser();
   StreamSubscription<String>? _messageSub;
   StreamSubscription<SignalKConnectionState>? _stateSub;
   Timer? _cleanupTimer;
+  Timer? _livePathsTimer;
+  Timer? _staleDataTimer;
 
   SignalKNotifier() : super(const SignalKState()) {
     _cleanupTimer = Timer.periodic(
@@ -37,6 +41,13 @@ class SignalKNotifier extends StateNotifier<SignalKState> {
 
     _stateSub = _source!.connectionState.listen((connState) {
       state = state.copyWith(connectionState: connState);
+
+      if (connState == SignalKConnectionState.disconnected ||
+          connState == SignalKConnectionState.error) {
+        _scheduleStaleDataClear();
+      } else if (connState == SignalKConnectionState.connected) {
+        _cancelStaleDataClear();
+      }
     });
 
     _messageSub = _source!.messages.listen(_handleDelta);
@@ -49,6 +60,9 @@ class SignalKNotifier extends StateNotifier<SignalKState> {
     _messageSub = null;
     _stateSub?.cancel();
     _stateSub = null;
+    _livePathsTimer?.cancel();
+    _livePathsTimer = null;
+    _cancelStaleDataClear();
     _source?.dispose();
     _source = null;
     state = state.copyWith(
@@ -56,11 +70,28 @@ class SignalKNotifier extends StateNotifier<SignalKState> {
     );
   }
 
+  /// After 30s of disconnect, clear stale own-vessel data.
+  void _scheduleStaleDataClear() {
+    _staleDataTimer?.cancel();
+    _staleDataTimer = Timer(const Duration(seconds: 30), () {
+      if (state.connectionState == SignalKConnectionState.disconnected ||
+          state.connectionState == SignalKConnectionState.error) {
+        state = state.copyWith(
+          ownVessel: const SignalKVesselData(),
+          lastUpdatedPaths: const {},
+        );
+      }
+    });
+  }
+
+  void _cancelStaleDataClear() {
+    _staleDataTimer?.cancel();
+    _staleDataTimer = null;
+  }
+
   void _handleDelta(String raw) {
     final delta = _parser.parse(raw);
     if (delta == null) return;
-
-    state = state.copyWith(lastUpdateAt: DateTime.now());
 
     if (delta.isSelf) {
       _applyOwnVessel(delta);
@@ -97,13 +128,22 @@ class SignalKNotifier extends StateNotifier<SignalKState> {
         electrical: _mergeElectrical(vessel.electrical, delta.electrical!),
       );
     }
-    if (delta.notifications != null) {
-      state = state.copyWith(
-        notifications: delta.notifications!.notifications,
-      );
-    }
 
-    state = state.copyWith(ownVessel: vessel);
+    // Emit a single state update for this delta — immediate, no batching.
+    state = state.copyWith(
+      ownVessel: vessel,
+      lastUpdateAt: DateTime.now(),
+      lastUpdatedPaths: delta.paths,
+      notifications: delta.notifications?.notifications,
+    );
+
+    // Auto-clear lastUpdatedPaths after 2 seconds so UI can fade "live" indicators.
+    _livePathsTimer?.cancel();
+    _livePathsTimer = Timer(const Duration(seconds: 2), () {
+      if (state.lastUpdatedPaths.isNotEmpty) {
+        state = state.copyWith(lastUpdatedPaths: const {});
+      }
+    });
   }
 
   void _applyAisVessel(int mmsi, AisVesselData incoming) {
@@ -257,6 +297,8 @@ class SignalKNotifier extends StateNotifier<SignalKState> {
   @override
   void dispose() {
     _cleanupTimer?.cancel();
+    _livePathsTimer?.cancel();
+    _staleDataTimer?.cancel();
     disconnect();
     super.dispose();
   }
@@ -303,4 +345,9 @@ final signalKPropulsionProvider = Provider<PropulsionData>((ref) {
 /// Derived: tanks data from Signal K.
 final signalKTanksProvider = Provider<TanksData>((ref) {
   return ref.watch(signalKProvider).ownVessel.tanks;
+});
+
+/// Derived: paths updated in the most recent delta (live for ~2s).
+final signalKLivePathsProvider = Provider<Set<String>>((ref) {
+  return ref.watch(signalKProvider).lastUpdatedPaths;
 });
