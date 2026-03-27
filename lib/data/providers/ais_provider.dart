@@ -181,6 +181,53 @@ class AisNotifier extends StateNotifier<Map<int, AisTarget>> {
     }
   }
 
+  /// Merge AIS targets from Signal K vessel data map.
+  void mergeFromSignalK(Map<int, dynamic> vessels) {
+    final updated = Map<int, AisTarget>.from(state);
+    for (final entry in vessels.entries) {
+      final mmsi = entry.key;
+      final v = entry.value;
+      if (v.position == null) continue;
+
+      final existing = updated[mmsi];
+      if (existing != null) {
+        updated[mmsi] = existing.copyWith(
+          position: v.position ?? existing.position,
+          sogKnots: v.sog ?? existing.sogKnots,
+          cogDegrees: v.cog ?? existing.cogDegrees,
+          headingTrue: v.heading ?? existing.headingTrue,
+          vesselName: v.name ?? existing.vesselName,
+          callSign: v.callsign ?? existing.callSign,
+          shipType: v.shipType ?? existing.shipType,
+          navStatus: v.navStatus ?? existing.navStatus,
+          dimBow: v.dimBow ?? existing.dimBow,
+          dimStern: v.dimStern ?? existing.dimStern,
+          dimPort: v.dimPort ?? existing.dimPort,
+          dimStarboard: v.dimStarboard ?? existing.dimStarboard,
+          lastSeen: DateTime.now(),
+        );
+      } else {
+        updated[mmsi] = AisTarget(
+          mmsi: mmsi,
+          position: v.position,
+          sogKnots: v.sog ?? 0,
+          cogDegrees: v.cog ?? 0,
+          headingTrue: v.heading,
+          vesselName: v.name,
+          callSign: v.callsign,
+          shipType: v.shipType,
+          navStatus: v.navStatus,
+          dimBow: v.dimBow,
+          dimStern: v.dimStern,
+          dimPort: v.dimPort,
+          dimStarboard: v.dimStarboard,
+          lastSeen: DateTime.now(),
+        );
+      }
+    }
+    state = updated;
+  }
+
   @override
   void dispose() {
     _cleanupTimer?.cancel();

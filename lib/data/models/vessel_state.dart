@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:latlong2/latlong.dart';
 
-enum PositionSource { none, deviceGps, nmeaGps }
+enum PositionSource { none, deviceGps, nmeaGps, signalK }
 
 class VesselState {
   final LatLng? position;
@@ -9,9 +9,11 @@ class VesselState {
   final double? cog; // degrees true
   final double? heading; // degrees true
   final double? depth; // metres (below transducer)
-  final double? windSpeed; // knots
-  final double? windAngle; // degrees
+  final double? windSpeed; // knots (apparent)
+  final double? windAngle; // degrees (apparent)
   final bool windIsRelative;
+  final double? trueWindSpeed; // knots
+  final double? trueWindAngle; // degrees
   final double? gpsAccuracy; // metres
   final PositionSource source;
   final DateTime? timestamp;
@@ -25,6 +27,8 @@ class VesselState {
     this.windSpeed,
     this.windAngle,
     this.windIsRelative = true,
+    this.trueWindSpeed,
+    this.trueWindAngle,
     this.gpsAccuracy,
     this.source = PositionSource.none,
     this.timestamp,
@@ -46,6 +50,8 @@ class VesselState {
     double? windSpeed,
     double? windAngle,
     bool? windIsRelative,
+    double? trueWindSpeed,
+    double? trueWindAngle,
     double? gpsAccuracy,
     PositionSource? source,
     DateTime? timestamp,
@@ -59,6 +65,8 @@ class VesselState {
       windSpeed: windSpeed ?? this.windSpeed,
       windAngle: windAngle ?? this.windAngle,
       windIsRelative: windIsRelative ?? this.windIsRelative,
+      trueWindSpeed: trueWindSpeed ?? this.trueWindSpeed,
+      trueWindAngle: trueWindAngle ?? this.trueWindAngle,
       gpsAccuracy: gpsAccuracy ?? this.gpsAccuracy,
       source: source ?? this.source,
       timestamp: timestamp ?? this.timestamp,

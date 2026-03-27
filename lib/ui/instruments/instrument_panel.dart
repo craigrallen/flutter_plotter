@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/providers/data_source_provider.dart';
 import '../../data/providers/settings_provider.dart';
+import '../../data/providers/signalk_provider.dart';
 import '../../data/providers/vessel_provider.dart';
 import 'instrument_tile.dart';
 
@@ -12,6 +14,10 @@ class InstrumentPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final vessel = ref.watch(vesselProvider);
     final settings = ref.watch(appSettingsProvider);
+    final dataSource = ref.watch(dataSourceProvider);
+    final skEnv = dataSource.isSignalK
+        ? ref.watch(signalKEnvironmentProvider)
+        : null;
 
     return Container(
       decoration: BoxDecoration(
@@ -78,19 +84,39 @@ class InstrumentPanel extends ConsumerWidget {
                   _depthUnit(settings),
                 ),
                 _tile(
-                  'WIND',
+                  'AWS',
                   vessel.windSpeed != null
                       ? _speedValue(vessel.windSpeed!, settings)
                       : '--',
-                  vessel.windIsRelative ? 'apparent' : 'true',
+                  'apparent',
                 ),
                 _tile(
                   'AWA',
                   vessel.windAngle != null
                       ? '${vessel.windAngle!.toStringAsFixed(0)}°'
                       : '--',
-                  vessel.windIsRelative ? 'relative' : 'true',
+                  'apparent',
                 ),
+                // Show true wind if available (from Signal K or computed)
+                if (vessel.trueWindSpeed != null ||
+                    (skEnv != null && skEnv.windSpeedTrue != null))
+                  _tile(
+                    'TWS',
+                    _speedValue(
+                      vessel.trueWindSpeed ??
+                          skEnv?.windSpeedTrue ??
+                          0,
+                      settings,
+                    ),
+                    'true',
+                  ),
+                if (vessel.trueWindAngle != null ||
+                    (skEnv != null && skEnv.windAngleTrueWater != null))
+                  _tile(
+                    'TWA',
+                    '${(vessel.trueWindAngle ?? skEnv?.windAngleTrueWater ?? 0).toStringAsFixed(0)}°',
+                    'true',
+                  ),
                 _tile(
                   'VMG',
                   vessel.vmg != null

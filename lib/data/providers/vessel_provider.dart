@@ -5,10 +5,11 @@ import 'package:latlong2/latlong.dart';
 import '../models/vessel_state.dart';
 
 /// Provides the current vessel state, streaming from device GPS.
-/// When NMEA data is available it takes priority over device GPS.
+/// When NMEA or Signal K data is available it takes priority over device GPS.
 class VesselNotifier extends StateNotifier<VesselState> {
   StreamSubscription<Position>? _gpsSub;
   DateTime? _lastNmeaUpdate;
+  DateTime? _lastSignalKUpdate;
 
   VesselNotifier() : super(const VesselState()) {
     _startGps();
@@ -18,6 +19,11 @@ class VesselNotifier extends StateNotifier<VesselState> {
   bool get _nmeaActive =>
       _lastNmeaUpdate != null &&
       DateTime.now().difference(_lastNmeaUpdate!).inSeconds < 5;
+
+  /// True if we've received Signal K data in the last 5 seconds.
+  bool get _signalKActive =>
+      _lastSignalKUpdate != null &&
+      DateTime.now().difference(_lastSignalKUpdate!).inSeconds < 5;
 
   Future<void> _startGps() async {
     final permission = await _ensurePermission();
@@ -30,8 +36,8 @@ class VesselNotifier extends StateNotifier<VesselState> {
 
     _gpsSub = Geolocator.getPositionStream(locationSettings: settings).listen(
       (pos) {
-        // Only use device GPS if NMEA is not active.
-        if (_nmeaActive) return;
+        // Only use device GPS if neither NMEA nor Signal K is active.
+        if (_nmeaActive || _signalKActive) return;
 
         state = VesselState(
           position: LatLng(pos.latitude, pos.longitude),
@@ -80,6 +86,36 @@ class VesselNotifier extends StateNotifier<VesselState> {
       windAngle: windAngle ?? state.windAngle,
       windIsRelative: windIsRelative ?? state.windIsRelative,
       source: PositionSource.nmeaGps,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  /// Called by Signal K provider when own vessel data is received.
+  void updateFromSignalK({
+    LatLng? position,
+    double? sog,
+    double? cog,
+    double? heading,
+    double? depth,
+    double? windSpeedApparent,
+    double? windAngleApparent,
+    double? windSpeedTrue,
+    double? windAngleTrue,
+  }) {
+    _lastSignalKUpdate = DateTime.now();
+
+    state = state.copyWith(
+      position: position ?? state.position,
+      sog: sog ?? state.sog,
+      cog: cog ?? state.cog,
+      heading: heading ?? state.heading,
+      depth: depth ?? state.depth,
+      windSpeed: windSpeedApparent ?? state.windSpeed,
+      windAngle: windAngleApparent ?? state.windAngle,
+      windIsRelative: windSpeedApparent != null ? true : state.windIsRelative,
+      trueWindSpeed: windSpeedTrue ?? state.trueWindSpeed,
+      trueWindAngle: windAngleTrue ?? state.trueWindAngle,
+      source: PositionSource.signalK,
       timestamp: DateTime.now(),
     );
   }
