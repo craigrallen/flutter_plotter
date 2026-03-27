@@ -47,6 +47,7 @@ class FloatillaService {
   }
 
   bool isLoggedIn() => _token != null;
+  String? get token => _token;
 
   Future<bool> login(String username, String password) async {
     final resp = await http.post(
@@ -229,6 +230,69 @@ class FloatillaService {
       }),
     );
     return resp.statusCode == 200 || resp.statusCode == 201;
+  }
+
+  // ── Cloud Sync ────────────────────────────────────────────
+
+  /// Upload routes to cloud. Each route is a map with 'name', 'createdAt',
+  /// 'isActive', and 'waypoints' (list of {name, lat, lng, notes, createdAt}).
+  Future<bool> uploadRoutes(List<Map<String, dynamic>> routes) async {
+    if (_token == null) return false;
+    try {
+      final resp = await http.put(
+        Uri.parse('$baseUrl/sync/routes'),
+        headers: _authHeaders,
+        body: jsonEncode({'routes': routes}),
+      );
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Download routes from cloud. Returns null on error.
+  Future<Map<String, dynamic>?> downloadRoutes() async {
+    if (_token == null) return null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$baseUrl/sync/routes'),
+        headers: _authHeaders,
+      );
+      if (resp.statusCode != 200) return null;
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Upload waypoints to cloud.
+  Future<bool> uploadWaypoints(List<Map<String, dynamic>> waypoints) async {
+    if (_token == null) return false;
+    try {
+      final resp = await http.put(
+        Uri.parse('$baseUrl/sync/waypoints'),
+        headers: _authHeaders,
+        body: jsonEncode({'waypoints': waypoints}),
+      );
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Download waypoints from cloud. Returns null on error.
+  Future<Map<String, dynamic>?> downloadWaypoints() async {
+    if (_token == null) return null;
+    try {
+      final resp = await http.get(
+        Uri.parse('$baseUrl/sync/waypoints'),
+        headers: _authHeaders,
+      );
+      if (resp.statusCode != 200) return null;
+      return jsonDecode(resp.body) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── MoB ───────────────────────────────────────────────────

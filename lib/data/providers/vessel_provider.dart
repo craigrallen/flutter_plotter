@@ -127,8 +127,24 @@ class VesselNotifier extends StateNotifier<VesselState> {
     if (perm == LocationPermission.denied) {
       perm = await Geolocator.requestPermission();
     }
+    if (perm == LocationPermission.deniedForever) return false;
     return perm == LocationPermission.whileInUse ||
         perm == LocationPermission.always;
+  }
+
+  /// Upgrade to "always" location permission — required for anchor watch
+  /// to continue monitoring when the app is backgrounded.
+  Future<bool> requestAlwaysPermission() async {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.always) return true;
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      return false;
+    }
+    // On Android, requestPermission again while whileInUse triggers the
+    // "Allow all the time" system dialog.
+    perm = await Geolocator.requestPermission();
+    return perm == LocationPermission.always;
   }
 
   @override

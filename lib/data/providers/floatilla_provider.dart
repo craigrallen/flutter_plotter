@@ -1,7 +1,11 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/floatilla/floatilla_models.dart';
 import '../../core/floatilla/floatilla_service.dart';
+import '../../data/models/route_model.dart';
+import '../../data/models/waypoint.dart';
+import 'route_provider.dart';
 import 'vessel_provider.dart';
 
 // ── Service singleton ───────────────────────────────────────
@@ -103,6 +107,162 @@ final mobAlertProvider = StateProvider<MobAlert?>((ref) => null);
 
 final pendingWaypointsProvider =
     StateProvider<List<FloatillaWaypoint>>((ref) => []);
+
+// ── Cloud Sync ──────────────────────────────────────────────
+
+enum CloudSyncStatus { idle, syncing, success, error }
+
+class CloudSyncState {
+  final CloudSyncStatus status;
+  final String? message;
+  const CloudSyncState({this.status = CloudSyncStatus.idle, this.message});
+}
+
+class CloudSyncNotifier extends StateNotifier<CloudSyncState> {
+  final FloatillaService _service;
+  final Ref _ref;
+
+  CloudSyncNotifier(this._service, this._ref)
+      : super(const CloudSyncState());
+
+  Future<void> backup() async {
+    if (!_service.isLoggedIn()) {
+      state = const CloudSyncState(
+          status: CloudSyncStatus.error,
+          message: 'Sign in to Floatilla to backup');
+      return;
+    }
+    state = const CloudSyncState(status: CloudSyncStatus.syncing);
+
+    // Serialise routes
+    final routes = _ref.read(routesProvider);
+    final routePayload = routes.map((r) => {
+          'name': r.name,
+          'isActive': r.isActive,
+          'createdAt': r.createdAt.toIso8601String(),
+          'waypoints': r.waypoints
+              .map((w) => {
+                    'name': w.name,
+                    'lat': w.position.latitude,
+                    'lng': w.position.longitude,
+                    'notes': w.notes,
+                    'createdAt': w.createdAt.toIso8601String(),
+                  })
+              .toList(),
+        }).toList();
+
+    // Serialise standalone waypoints
+    final waypoints = _ref.read(waypointsProvider);
+    final waypointPayload = waypoints
+        .map((w) => {
+              'name': w.name,
+              'lat': w.position.latitude,
+              'lng': w.position.longitude,
+              'notes': w.notes,
+              'createdAt': w.createdAt.toIso8601String(),
+            })
+        .toList();
+
+    final ok1 = await _service.uploadRoutes(routePayload);
+    final ok2 = await _service.uploadWaypoints(waypointPayload);
+
+    if (ok1 && ok2) {
+      state = CloudSyncState(
+          status: CloudSyncStatus.success,
+          message:
+              'Backed up ${routes.length} routes, ${waypoints.length} waypoints');
+    } else {
+      state = const CloudSyncState(
+          status: CloudSyncStatus.error, message: 'Backup failed');
+    }
+  }
+
+  Future<void> restore() async {
+    if (!_service.isLoggedIn()) {
+      state = const CloudSyncState(
+          status: CloudSyncStatus.error,
+          message: 'Sign in to Floatilla to restore');
+      return;
+    }
+    state = const CloudSyncState(status: CloudSyncStatus.syncing);
+
+    final routeData = await _service.downloadRoutes();
+    final waypointData = await _service.downloadWaypoints();
+
+    if (routeData == null || waypointData == null) {
+      state = const CloudSyncState(
+          status: CloudSyncStatus.error, message: 'Restore failed');
+      return;
+    }
+
+    // Restore standalone waypoints first
+    final rawWps = (waypointData['waypoints'] as List?) ?? [];
+    var wpCount = 0;
+    for (final raw in rawWps) {
+      final m = raw as Map<String, dynamic>;
+      try {
+        await _ref.read(waypointsProvider.notifier).add(Waypoint(
+              name: m['name'] as String? ?? 'Waypoint',
+              position: LatLng(
+                (m['lat'] as num).toDouble(),
+                (m['lng'] as num).toDouble(),
+              ),
+              notes: m['notes'] as String?,
+              createdAt: DateTime.tryParse(m['createdAt'] as String? ?? '') ??
+                  DateTime.now(),
+            ));
+        wpCount++;
+      } catch (_) {}
+    }
+
+    // Restore routes (each route's waypoints are embedded)
+    final rawRoutes = (routeData['routes'] as List?) ?? [];
+    var routeCount = 0;
+    for (final raw in rawRoutes) {
+      final m = raw as Map<String, dynamic>;
+      try {
+        final rawRouteWps = (m['waypoints'] as List?) ?? [];
+        final savedWps = <Waypoint>[];
+        for (final rwp in rawRouteWps) {
+          final wm = rwp as Map<String, dynamic>;
+          final saved =
+              await _ref.read(waypointsProvider.notifier).add(Waypoint(
+                    name: wm['name'] as String? ?? 'WP',
+                    position: LatLng(
+                      (wm['lat'] as num).toDouble(),
+                      (wm['lng'] as num).toDouble(),
+                    ),
+                    notes: wm['notes'] as String?,
+                    createdAt:
+                        DateTime.tryParse(wm['createdAt'] as String? ?? '') ??
+                            DateTime.now(),
+                  ));
+          savedWps.add(saved);
+        }
+        await _ref.read(routesProvider.notifier).add(RouteModel(
+              name: m['name'] as String? ?? 'Route',
+              waypoints: savedWps,
+              createdAt: DateTime.tryParse(m['createdAt'] as String? ?? '') ??
+                  DateTime.now(),
+            ));
+        routeCount++;
+      } catch (_) {}
+    }
+
+    state = CloudSyncState(
+        status: CloudSyncStatus.success,
+        message: 'Restored $routeCount routes, $wpCount waypoints');
+  }
+
+  void reset() {
+    state = const CloudSyncState();
+  }
+}
+
+final cloudSyncProvider =
+    StateNotifierProvider<CloudSyncNotifier, CloudSyncState>((ref) {
+  return CloudSyncNotifier(ref.watch(floatillaServiceProvider), ref);
+});
 
 // ── Floatilla settings ──────────────────────────────────────
 

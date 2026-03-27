@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/gpx/gpx_io.dart';
 import '../../data/models/route_model.dart';
 import '../../data/models/waypoint.dart';
+import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/route_provider.dart';
 import 'route_editor_screen.dart';
 
@@ -20,6 +21,7 @@ class RouteListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Routes'),
         actions: [
+          _CloudSyncButton(),
           IconButton(
             icon: const Icon(Icons.file_download),
             tooltip: 'Import GPX',
@@ -217,5 +219,126 @@ class _RouteListTile extends ConsumerWidget {
   Future<void> _exportGpx(BuildContext context, RouteModel route) async {
     final filePath = await GpxExporter.exportToFile(route);
     await Share.shareXFiles([XFile(filePath)]);
+  }
+}
+
+// ── Cloud Sync Button ─────────────────────────────────────────────────────────
+
+class _CloudSyncButton extends ConsumerWidget {
+  const _CloudSyncButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sync = ref.watch(cloudSyncProvider);
+    final loggedIn = ref.watch(isLoggedInProvider);
+
+    if (sync.status == CloudSyncStatus.syncing) {
+      return const Padding(
+        padding: EdgeInsets.all(14),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    // Show result snackbar after sync
+    ref.listen<CloudSyncState>(cloudSyncProvider, (prev, next) {
+      if (next.status == CloudSyncStatus.success ||
+          next.status == CloudSyncStatus.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.message ?? ''),
+            backgroundColor: next.status == CloudSyncStatus.success
+                ? Colors.green[700]
+                : Colors.red[700],
+          ),
+        );
+        Future.delayed(const Duration(seconds: 2), () {
+          ref.read(cloudSyncProvider.notifier).reset();
+        });
+      }
+    });
+
+    return IconButton(
+      icon: Icon(
+        Icons.cloud_sync,
+        color: loggedIn ? null : Colors.grey,
+      ),
+      tooltip: loggedIn ? 'Cloud sync (backup / restore)' : 'Sign in to Floatilla to sync',
+      onPressed: () => _showSyncDialog(context, ref, loggedIn),
+    );
+  }
+
+  void _showSyncDialog(BuildContext context, WidgetRef ref, bool loggedIn) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.cloud_upload),
+              title: const Text('Back up to cloud'),
+              subtitle: const Text('Upload all routes & waypoints to Floatilla'),
+              enabled: loggedIn,
+              onTap: loggedIn
+                  ? () {
+                      Navigator.pop(ctx);
+                      ref.read(cloudSyncProvider.notifier).backup();
+                    }
+                  : null,
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_download),
+              title: const Text('Restore from cloud'),
+              subtitle: const Text('Import routes & waypoints saved in Floatilla'),
+              enabled: loggedIn,
+              onTap: loggedIn
+                  ? () {
+                      Navigator.pop(ctx);
+                      _confirmRestore(context, ref);
+                    }
+                  : null,
+            ),
+            if (!loggedIn)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Text(
+                  'Sign in to Floatilla (Social tab) to enable cloud sync.',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmRestore(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore from cloud?'),
+        content: const Text(
+          'This will add all your cloud-saved routes and waypoints to this device. '
+          'Existing data is kept — nothing will be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(cloudSyncProvider.notifier).restore();
+            },
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
   }
 }

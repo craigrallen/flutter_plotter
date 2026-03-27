@@ -15,6 +15,7 @@ import '../ais/target_list_screen.dart';
 import '../settings/settings_screen.dart';
 import '../signalk/signalk_dashboard.dart';
 import '../weather/weather_screen.dart';
+import '../floatilla/logbook_screen.dart';
 import '../floatilla/floatilla_shell.dart';
 import '../floatilla/mob_overlay.dart';
 import '../instruments/instrument_sidebar.dart';
@@ -73,6 +74,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   static const _screens = <Widget>[
     ChartScreen(),
     FloatillaShell(),
+    LogbookScreen(),
     RouteListScreen(),
     TargetListScreen(),
     SignalKDashboard(),
@@ -263,6 +265,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(icon: Icon(Icons.map), label: 'Chart'),
       const NavigationDestination(
           icon: Icon(Icons.groups), label: 'Floatilla'),
+      const NavigationDestination(icon: Icon(Icons.book), label: 'Logbook'),
       const NavigationDestination(icon: Icon(Icons.route), label: 'Routes'),
       NavigationDestination(
         icon: Badge(
@@ -293,6 +296,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.map), label: Text('Chart')),
       const NavigationRailDestination(
           icon: Icon(Icons.groups), label: Text('Floatilla')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.book), label: Text('Logbook')),
       const NavigationRailDestination(
           icon: Icon(Icons.route), label: Text('Routes')),
       NavigationRailDestination(

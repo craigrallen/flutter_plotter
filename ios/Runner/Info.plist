@@ -50,7 +50,14 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Floatilla needs your location to show your vessel position on the chart.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Floatilla needs your location to show your vessel position on the chart.</string>
+	<string>Floatilla needs your location in the background to monitor your anchor watch and alert you if your vessel drags.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Floatilla needs your location in the background to monitor your anchor watch and alert you if your vessel drags.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
