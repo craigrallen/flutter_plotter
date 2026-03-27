@@ -9,7 +9,11 @@ import 'ui/shared/theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await FloatillaService.instance.init();
+  try {
+    await FloatillaService.instance.init();
+  } catch (_) {
+    // Init failure is non-fatal — app still starts, user can log in manually
+  }
   runApp(const ProviderScope(child: FloatillaApp()));
 }
 

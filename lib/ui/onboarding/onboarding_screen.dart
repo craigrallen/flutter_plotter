@@ -140,7 +140,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Icon(Icons.sailing, size: 96, color: theme.colorScheme.primary),
           const SizedBox(height: 32),
           Text(
-            'Welcome to FlutterPlotter',
+            'Welcome to Floatilla',
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -234,7 +234,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'FlutterPlotter needs GPS access to show your vessel '
+            'Floatilla needs GPS access to show your vessel '
             'position on the chart.\n\n'
             'Tap "Get Started" to grant permission and begin navigating.',
             style: theme.textTheme.bodyLarge,
