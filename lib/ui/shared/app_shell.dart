@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/floatilla/floatilla_models.dart';
 import '../../core/nmea/nmea_stream.dart';
 import '../../core/signalk/signalk_source.dart';
+import '../../data/providers/data_source_provider.dart';
 import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
 import '../../data/providers/route_provider.dart';
@@ -28,6 +29,46 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
+  bool _autoConnectDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-reconnect Signal K / NMEA after the first frame, once the
+    // DataSourceNotifier has finished loading from SharedPreferences.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeAutoConnect();
+    });
+  }
+
+  Future<void> _maybeAutoConnect() async {
+    if (_autoConnectDone) return;
+    _autoConnectDone = true;
+    // Small delay to let DataSourceNotifier._load() complete.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
+    final config = ref.read(dataSourceProvider);
+    if (config.isSignalK && config.host.isNotEmpty) {
+      final skState = ref.read(signalKProvider).connectionState;
+      if (skState == SignalKConnectionState.disconnected) {
+        await ref.read(signalKProvider.notifier).connect(
+              host: config.host,
+              port: config.port,
+              token: config.token,
+            );
+      }
+    } else if (config.isNmea && config.host.isNotEmpty) {
+      final nmea = ref.read(nmeaStreamProvider);
+      nmea.connect(
+        host: config.host,
+        port: config.port,
+        protocol: config.type == DataSourceType.nmeaTcp
+            ? NmeaProtocol.tcp
+            : NmeaProtocol.udp,
+      );
+      ref.read(nmeaProcessorProvider);
+    }
+  }
 
   static const _screens = <Widget>[
     ChartScreen(),
