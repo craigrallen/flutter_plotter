@@ -647,7 +647,7 @@ class _FloatillaSocialSectionState
           controller: widget.serverController,
           decoration: const InputDecoration(
             labelText: 'Server URL',
-            hintText: 'https://fleet.floatilla.app',
+            hintText: 'https://floatilla-fleet-social-production.up.railway.app',
             border: OutlineInputBorder(),
           ),
           onChanged: (v) {

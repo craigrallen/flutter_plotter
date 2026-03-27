@@ -16,7 +16,7 @@ class FloatillaService {
   final _storage = const FlutterSecureStorage();
   static const _tokenKey = 'floatilla_jwt';
 
-  String baseUrl = 'https://fleet.floatilla.app';
+  String baseUrl = 'https://floatilla-fleet-social-production.up.railway.app';
   String? _token;
   String? _username;
   String? _vesselName;
