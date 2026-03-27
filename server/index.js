@@ -46,7 +46,8 @@ async function initDb() {
       sog DOUBLE PRECISION DEFAULT 0,
       cog DOUBLE PRECISION DEFAULT 0,
       last_seen BIGINT,
-      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      banned BOOLEAN DEFAULT false
     );
     CREATE TABLE IF NOT EXISTS friendships (
       id SERIAL PRIMARY KEY,
@@ -75,6 +76,10 @@ async function initDb() {
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
     );
   `);
+  // Add banned column if it doesn't exist (migration for existing deployments)
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT false
+  `).catch(() => {});
   console.log('Database schema ready');
 }
 
@@ -390,4 +395,126 @@ initDb().then(() => {
 }).catch(err => {
   console.error('Failed to init database:', err);
   process.exit(1);
+});
+
+// ── Admin API ─────────────────────────────────────────────────────────────────
+
+function adminAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
+  try {
+    const payload = jwt.verify(header.slice(7), JWT_SECRET);
+    if (!payload.admin) return res.status(403).json({ error: 'Forbidden' });
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+app.post('/admin/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (username !== process.env.ADMIN_USERNAME || password !== process.env.ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const token = jwt.sign({ admin: true, username }, JWT_SECRET, { expiresIn: '8h' });
+  res.json({ token });
+});
+
+app.get('/admin/stats', adminAuth, async (req, res) => {
+  const [users, messages, friendships] = await Promise.all([
+    pool.query('SELECT COUNT(*) FROM users'),
+    pool.query('SELECT COUNT(*) FROM messages'),
+    pool.query("SELECT COUNT(*) FROM friendships WHERE status = 'accepted'"),
+  ]);
+  const onlineRes = await pool.query(
+    'SELECT COUNT(*) FROM users WHERE last_seen > $1',
+    [Date.now() - 5 * 60 * 1000]
+  );
+  const newTodayRes = await pool.query(
+    'SELECT COUNT(*) FROM users WHERE created_at > $1',
+    [Math.floor(Date.now() / 1000) - 86400]
+  );
+  res.json({
+    totalUsers: parseInt(users.rows[0].count),
+    totalMessages: parseInt(messages.rows[0].count),
+    totalFriendships: parseInt(friendships.rows[0].count),
+    onlineNow: parseInt(onlineRes.rows[0].count),
+    newUsersToday: parseInt(newTodayRes.rows[0].count),
+    wsConnections: wsClients.size,
+  });
+});
+
+app.get('/admin/users', adminAuth, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  const search = req.query.search || '';
+  const result = await pool.query(`
+    SELECT id, username, vessel_name, email, lat, lng, last_seen, created_at,
+           (SELECT COUNT(*) FROM friendships WHERE (user_id = u.id OR friend_id = u.id) AND status = 'accepted') as friend_count,
+           (SELECT COUNT(*) FROM messages WHERE user_id = u.id) as message_count,
+           banned
+    FROM users u
+    WHERE $1 = '' OR LOWER(username) LIKE LOWER($1) OR LOWER(vessel_name) LIKE LOWER($1)
+    ORDER BY created_at DESC LIMIT $2 OFFSET $3
+  `, [search ? `%${search}%` : '', limit, offset]);
+  const countRes = await pool.query(
+    `SELECT COUNT(*) FROM users WHERE $1 = '' OR LOWER(username) LIKE LOWER($1) OR LOWER(vessel_name) LIKE LOWER($1)`,
+    [search ? `%${search}%` : '']
+  );
+  res.json({ users: result.rows, total: parseInt(countRes.rows[0].count), page, limit });
+});
+
+app.get('/admin/messages', adminAuth, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  const result = await pool.query(`
+    SELECT m.id, m.text, m.lat, m.lng, m.created_at, u.username, u.vessel_name
+    FROM messages m JOIN users u ON u.id = m.user_id
+    ORDER BY m.created_at DESC LIMIT $1 OFFSET $2
+  `, [limit, offset]);
+  const countRes = await pool.query('SELECT COUNT(*) FROM messages');
+  res.json({ messages: result.rows, total: parseInt(countRes.rows[0].count), page, limit });
+});
+
+app.delete('/admin/messages/:id', adminAuth, async (req, res) => {
+  await pool.query('DELETE FROM messages WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.post('/admin/users/:id/ban', adminAuth, async (req, res) => {
+  await pool.query('UPDATE users SET banned = true WHERE id = $1', [req.params.id]);
+  // Close WS if connected
+  const conn = wsClients.get(parseInt(req.params.id));
+  if (conn) { conn.close(4003, 'Banned'); wsClients.delete(parseInt(req.params.id)); }
+  res.json({ ok: true });
+});
+
+app.post('/admin/users/:id/unban', adminAuth, async (req, res) => {
+  await pool.query('UPDATE users SET banned = false WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.delete('/admin/users/:id', adminAuth, async (req, res) => {
+  await pool.query('DELETE FROM users WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.get('/admin/activity', adminAuth, async (req, res) => {
+  // Messages per day for last 14 days
+  const result = await pool.query(`
+    SELECT DATE(TO_TIMESTAMP(created_at)) as day, COUNT(*) as count
+    FROM messages
+    WHERE created_at > $1
+    GROUP BY day ORDER BY day
+  `, [Math.floor(Date.now() / 1000) - 14 * 86400]);
+  // New users per day for last 14 days
+  const usersResult = await pool.query(`
+    SELECT DATE(TO_TIMESTAMP(created_at)) as day, COUNT(*) as count
+    FROM users
+    WHERE created_at > $1
+    GROUP BY day ORDER BY day
+  `, [Math.floor(Date.now() / 1000) - 14 * 86400]);
+  res.json({ messages: result.rows, newUsers: usersResult.rows });
 });
