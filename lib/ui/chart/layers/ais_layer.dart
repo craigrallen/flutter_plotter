@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -55,16 +56,20 @@ class AisLayer extends ConsumerWidget {
         ));
       }
 
-      // Target marker
+      // Target marker — minimum 44dp tap area
       markers.add(Marker(
         point: target.position,
-        width: 32,
-        height: 32,
+        width: 44,
+        height: 44,
         child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
           onTap: () => _showTargetSheet(context, target, cpa),
-          child: Transform.rotate(
-            angle: (target.cogDegrees * pi / 180) - (mapRotation * pi / 180),
-            child: _TargetIcon(color: color, isAtoN: target.isAtoN),
+          child: Center(
+            child: Transform.rotate(
+              angle:
+                  (target.cogDegrees * pi / 180) - (mapRotation * pi / 180),
+              child: _TargetIcon(color: color, isAtoN: target.isAtoN),
+            ),
           ),
         ),
       ));
@@ -89,10 +94,23 @@ class AisLayer extends ConsumerWidget {
     }
   }
 
-  void _showTargetSheet(BuildContext context, AisTarget target, CpaResult? cpa) {
+  void _showTargetSheet(
+      BuildContext context, AisTarget target, CpaResult? cpa) {
+    HapticFeedback.selectionClick();
     showModalBottomSheet(
       context: context,
-      builder: (_) => _TargetDetailSheet(target: target, cpa: cpa),
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        minChildSize: 0.25,
+        maxChildSize: 0.7,
+        initialChildSize: 0.35,
+        builder: (context, scrollController) => _TargetDetailSheet(
+          target: target,
+          cpa: cpa,
+          scrollController: scrollController,
+        ),
+      ),
     );
   }
 }
@@ -152,8 +170,13 @@ class _TargetPainter extends CustomPainter {
 class _TargetDetailSheet extends StatelessWidget {
   final AisTarget target;
   final CpaResult? cpa;
+  final ScrollController scrollController;
 
-  const _TargetDetailSheet({required this.target, this.cpa});
+  const _TargetDetailSheet({
+    required this.target,
+    this.cpa,
+    required this.scrollController,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -161,47 +184,61 @@ class _TargetDetailSheet extends StatelessWidget {
         ? AisStaticVoyage.shipTypeName(target.shipType!)
         : 'Unknown';
 
-    return Padding(
+    final navStatus = target.navStatus != null
+        ? _navStatusName(target.navStatus!)
+        : null;
+
+    return ListView(
+      controller: scrollController,
       padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            target.displayName,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          _row('MMSI', target.mmsi.toString()),
-          if (target.callSign != null) _row('Call Sign', target.callSign!),
-          _row('Ship Type', shipTypeName),
-          _row('SOG', '${target.sogKnots.toStringAsFixed(1)} kn'),
-          _row('COG', '${target.cogDegrees.toStringAsFixed(1)}°'),
-          if (target.headingTrue != null)
-            _row('Heading', '${target.headingTrue!.toStringAsFixed(1)}°'),
-          if (cpa != null) ...[
-            const Divider(),
-            _row('CPA', '${cpa!.cpaNm.toStringAsFixed(2)} nm'),
-            _row(
-              'TCPA',
-              cpa!.tcpaMinutes < 0
-                  ? 'Diverging'
-                  : cpa!.tcpaMinutes == double.infinity
-                      ? 'N/A'
-                      : '${cpa!.tcpaMinutes.toStringAsFixed(1)} min',
+      children: [
+        // Drag handle
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(2),
             ),
-          ],
-          if (target.lengthMetres > 0)
-            _row('Size', '${target.lengthMetres}m x ${target.beamMetres}m'),
-          const SizedBox(height: 8),
+          ),
+        ),
+        Text(
+          target.displayName,
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 12),
+        _row('MMSI', target.mmsi.toString()),
+        if (target.callSign != null) _row('Call Sign', target.callSign!),
+        _row('Ship Type', shipTypeName),
+        if (navStatus != null) _row('Nav Status', navStatus),
+        _row('SOG', '${target.sogKnots.toStringAsFixed(1)} kn'),
+        _row('COG', '${target.cogDegrees.toStringAsFixed(1)}°'),
+        if (target.headingTrue != null)
+          _row('Heading', '${target.headingTrue!.toStringAsFixed(1)}°'),
+        if (cpa != null) ...[
+          const Divider(),
+          _row('CPA', '${cpa!.cpaNm.toStringAsFixed(2)} nm'),
+          _row(
+            'TCPA',
+            cpa!.tcpaMinutes < 0
+                ? 'Diverging'
+                : cpa!.tcpaMinutes == double.infinity
+                    ? 'N/A'
+                    : '${cpa!.tcpaMinutes.toStringAsFixed(1)} min',
+          ),
         ],
-      ),
+        if (target.lengthMetres > 0)
+          _row('Size', '${target.lengthMetres}m x ${target.beamMetres}m'),
+        const SizedBox(height: 8),
+      ],
     );
   }
 
   Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+    return SizedBox(
+      height: 48,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -210,5 +247,23 @@ class _TargetDetailSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _navStatusName(int status) {
+    const names = {
+      0: 'Under way using engine',
+      1: 'At anchor',
+      2: 'Not under command',
+      3: 'Restricted manoeuvrability',
+      4: 'Constrained by draught',
+      5: 'Moored',
+      6: 'Aground',
+      7: 'Engaged in fishing',
+      8: 'Under way sailing',
+      11: 'Power-driven towing astern',
+      12: 'Power-driven pushing ahead',
+      14: 'AIS-SART',
+    };
+    return names[status] ?? 'Unknown ($status)';
   }
 }

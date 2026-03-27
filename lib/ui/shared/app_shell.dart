@@ -10,6 +10,8 @@ import '../ais/target_list_screen.dart';
 import '../settings/settings_screen.dart';
 import '../signalk/signalk_dashboard.dart';
 import '../weather/weather_screen.dart';
+import '../instruments/instrument_sidebar.dart';
+import 'responsive.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -43,38 +45,125 @@ class _AppShellState extends ConsumerState<AppShell> {
     final skConnected = skConnState == SignalKConnectionState.connected;
     final anyConnected = isConnected || skConnected;
 
+    final layout = Responsive.of(context);
+
+    switch (layout) {
+      case LayoutSize.compact:
+        return _buildCompactLayout(anyConnected, skConnected);
+      case LayoutSize.medium:
+        return _buildMediumLayout(anyConnected, skConnected);
+      case LayoutSize.expanded:
+        return _buildExpandedLayout(anyConnected, skConnected);
+    }
+  }
+
+  /// Phone: bottom NavigationBar.
+  Widget _buildCompactLayout(bool anyConnected, bool skConnected) {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
-        destinations: [
-          const NavigationDestination(icon: Icon(Icons.map), label: 'Chart'),
-          const NavigationDestination(icon: Icon(Icons.route), label: 'Routes'),
-          NavigationDestination(
-            icon: Badge(
-              smallSize: 8,
-              backgroundColor:
-                  anyConnected ? Colors.green : Colors.transparent,
-              child: const Icon(Icons.sailing),
-            ),
-            label: 'AIS',
+        destinations: _navDestinations(anyConnected, skConnected),
+      ),
+    );
+  }
+
+  /// Medium tablet / large phone: NavigationRail on left, no bottom nav.
+  Widget _buildMediumLayout(bool anyConnected, bool skConnected) {
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            labelType: NavigationRailLabelType.all,
+            destinations: _railDestinations(anyConnected, skConnected),
           ),
-          NavigationDestination(
-            icon: Badge(
-              smallSize: 8,
-              backgroundColor:
-                  skConnected ? Colors.green : Colors.transparent,
-              child: const Icon(Icons.speed),
-            ),
-            label: 'Signal K',
+          const VerticalDivider(thickness: 1, width: 1),
+          Expanded(
+            child: IndexedStack(index: _selectedIndex, children: _screens),
           ),
-          const NavigationDestination(
-              icon: Icon(Icons.cloud), label: 'Weather'),
-          const NavigationDestination(
-              icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
+  }
+
+  /// Large tablet: NavigationRail + persistent InstrumentSidebar on chart tab.
+  Widget _buildExpandedLayout(bool anyConnected, bool skConnected) {
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+            labelType: NavigationRailLabelType.all,
+            destinations: _railDestinations(anyConnected, skConnected),
+          ),
+          const VerticalDivider(thickness: 1, width: 1),
+          if (_selectedIndex == 0) const InstrumentSidebar(),
+          Expanded(
+            child: IndexedStack(index: _selectedIndex, children: _screens),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<NavigationDestination> _navDestinations(
+      bool anyConnected, bool skConnected) {
+    return [
+      const NavigationDestination(icon: Icon(Icons.map), label: 'Chart'),
+      const NavigationDestination(icon: Icon(Icons.route), label: 'Routes'),
+      NavigationDestination(
+        icon: Badge(
+          smallSize: 8,
+          backgroundColor: anyConnected ? Colors.green : Colors.transparent,
+          child: const Icon(Icons.sailing),
+        ),
+        label: 'AIS',
+      ),
+      NavigationDestination(
+        icon: Badge(
+          smallSize: 8,
+          backgroundColor: skConnected ? Colors.green : Colors.transparent,
+          child: const Icon(Icons.speed),
+        ),
+        label: 'Signal K',
+      ),
+      const NavigationDestination(icon: Icon(Icons.cloud), label: 'Weather'),
+      const NavigationDestination(
+          icon: Icon(Icons.settings), label: 'Settings'),
+    ];
+  }
+
+  List<NavigationRailDestination> _railDestinations(
+      bool anyConnected, bool skConnected) {
+    return [
+      const NavigationRailDestination(
+          icon: Icon(Icons.map), label: Text('Chart')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.route), label: Text('Routes')),
+      NavigationRailDestination(
+        icon: Badge(
+          smallSize: 8,
+          backgroundColor: anyConnected ? Colors.green : Colors.transparent,
+          child: const Icon(Icons.sailing),
+        ),
+        label: const Text('AIS'),
+      ),
+      NavigationRailDestination(
+        icon: Badge(
+          smallSize: 8,
+          backgroundColor: skConnected ? Colors.green : Colors.transparent,
+          child: const Icon(Icons.speed),
+        ),
+        label: const Text('Signal K'),
+      ),
+      const NavigationRailDestination(
+          icon: Icon(Icons.cloud), label: Text('Weather')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.settings), label: Text('Settings')),
+    ];
   }
 }

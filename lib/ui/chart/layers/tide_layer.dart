@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tides/tide_station.dart';
@@ -18,11 +19,12 @@ class TideLayer extends ConsumerWidget {
         if (list.isEmpty) return const SizedBox.shrink();
         final markers = list.map((s) => Marker(
               point: s.position,
-              width: 36,
-              height: 36,
+              width: 44,
+              height: 44,
               child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
                 onTap: () => _openTidePanel(context, s),
-                child: const _TideStationIcon(),
+                child: const Center(child: _TideStationIcon()),
               ),
             ));
         return MarkerLayer(markers: markers.toList());
@@ -33,6 +35,7 @@ class TideLayer extends ConsumerWidget {
   }
 
   void _openTidePanel(BuildContext context, TideStation station) {
+    HapticFeedback.selectionClick();
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => TidePanel(
         stationId: station.id,
@@ -48,6 +51,8 @@ class _TideStationIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: Colors.blue.withValues(alpha: 0.8),
         shape: BoxShape.circle,

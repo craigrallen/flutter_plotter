@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/providers/anchor_provider.dart';
 import '../../data/providers/vessel_provider.dart';
@@ -13,7 +14,9 @@ class AnchorScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Anchor Watch')),
-      body: Padding(
+      body: SafeArea(
+        top: false,
+        child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -95,6 +98,7 @@ class AnchorScreen extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: vessel.position != null
                     ? () {
+                        HapticFeedback.heavyImpact();
                         ref.read(anchorProvider.notifier).dropAnchor();
                         Navigator.pop(context);
                       }
@@ -130,6 +134,7 @@ class AnchorScreen extends ConsumerWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }

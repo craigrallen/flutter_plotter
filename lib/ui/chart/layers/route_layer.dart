@@ -25,9 +25,11 @@ class RouteLayer extends ConsumerWidget {
     final points = wps.map((wp) => wp.position).toList();
 
     // Completed legs (dimmer)
-    final completedPoints = points.sublist(0, (nextIdx + 1).clamp(0, points.length));
+    final completedPoints =
+        points.sublist(0, (nextIdx + 1).clamp(0, points.length));
     // Remaining legs (bright)
-    final remainingPoints = points.sublist(nextIdx.clamp(0, points.length - 1));
+    final remainingPoints =
+        points.sublist(nextIdx.clamp(0, points.length - 1));
 
     final polylines = <Polyline>[
       if (completedPoints.length >= 2)
@@ -45,19 +47,22 @@ class RouteLayer extends ConsumerWidget {
         ),
     ];
 
-    // Waypoint markers
+    // Waypoint markers — minimum 44dp tap area
     final markers = <Marker>[];
     for (var i = 0; i < wps.length; i++) {
       final wp = wps[i];
       final isNext = i == nextIdx;
       markers.add(Marker(
         point: wp.position,
-        width: 36,
-        height: 36,
-        child: _WaypointMarker(
-          name: wp.name,
-          index: i,
-          isNext: isNext,
+        width: 44,
+        height: 48,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          child: _WaypointMarker(
+            name: wp.name,
+            index: i,
+            isNext: isNext,
+          ),
         ),
       ));
     }

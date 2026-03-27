@@ -18,6 +18,8 @@ import '../../data/providers/vessel_provider.dart';
 import '../../data/providers/weather_provider.dart';
 import '../anchor/anchor_screen.dart';
 import '../instruments/instrument_panel.dart';
+import '../instruments/instrument_strip.dart';
+import '../shared/spacing.dart';
 import 'layers/anchor_layer.dart';
 import 'layers/tide_layer.dart';
 import 'layers/vessel_layer.dart';
@@ -63,6 +65,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   }
 
   void _onLongPress(TapPosition tapPos, LatLng position) {
+    HapticFeedback.mediumImpact();
     _showAddWaypointDialog(position);
   }
 
@@ -138,7 +141,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     }
 
     if (alarm && !_cpaAlarmFlash) {
-      HapticFeedback.heavyImpact();
+      HapticFeedback.vibrate();
       SystemSound.play(SystemSoundType.alert);
       _startFlash();
     } else if (!alarm && _cpaAlarmFlash) {
@@ -190,93 +193,143 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     // Check CPA alarm on AIS updates
     ref.listen<Map<int, AisTarget>>(aisProvider, (_, _) => _checkCpaAlarm());
 
-    final topPadding = MediaQuery.of(context).padding.top;
+    final orientation = MediaQuery.of(context).orientation;
+    final isLandscape = orientation == Orientation.landscape;
+    final safePadding = MediaQuery.of(context).padding;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          // Map
-          RepaintBoundary(
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter:
-                    vessel.position ?? const LatLng(57.7089, 11.9746),
-                initialZoom: 13,
-                initialRotation: mapRotation,
-                onLongPress: _onLongPress,
-                onPositionChanged: (pos, hasGesture) {
-                  if (hasGesture) {
-                    setState(() => _followVessel = false);
-                  }
-                },
-              ),
-              children: [
-                _baseLayer.tileLayer,
-                _seaLayer.tileLayer,
-                const RepaintBoundary(child: WeatherLayer()),
-                const RepaintBoundary(child: TideLayer()),
-                RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
-                const RepaintBoundary(child: AnchorLayer()),
-                RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
-                RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
-              ],
+      body: OrientationBuilder(
+        builder: (context, orientation) {
+          return Row(
+            children: [
+              // Main chart area
+              Expanded(child: _buildChartStack(
+                context,
+                vessel: vessel,
+                courseUp: courseUp,
+                navData: navData,
+                settings: settings,
+                connectionState: connectionState,
+                mapRotation: mapRotation,
+                safePadding: safePadding,
+                isLandscape: isLandscape,
+              )),
+              // Landscape phone: instrument strip on right
+              if (isLandscape) const InstrumentStrip(),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildChartStack(
+    BuildContext context, {
+    required VesselState vessel,
+    required bool courseUp,
+    required RouteNavData? navData,
+    required AppSettings settings,
+    required NmeaConnectionState connectionState,
+    required double mapRotation,
+    required EdgeInsets safePadding,
+    required bool isLandscape,
+  }) {
+    return Stack(
+      children: [
+        // Map — full bleed, no SafeArea
+        RepaintBoundary(
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter:
+                  vessel.position ?? const LatLng(57.7089, 11.9746),
+              initialZoom: 13,
+              initialRotation: mapRotation,
+              onLongPress: _onLongPress,
+              onPositionChanged: (pos, hasGesture) {
+                if (hasGesture) {
+                  setState(() => _followVessel = false);
+                }
+              },
             ),
+            children: [
+              _baseLayer.tileLayer,
+              _seaLayer.tileLayer,
+              const RepaintBoundary(child: WeatherLayer()),
+              const RepaintBoundary(child: TideLayer()),
+              RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
+              const RepaintBoundary(child: AnchorLayer()),
+              RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
+              RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
+            ],
           ),
+        ),
 
-          // Scale bar overlay.
-          Builder(
-            builder: (context) {
-              return ScaleBarLayer(camera: _mapController.camera);
-            },
-          ),
+        // Scale bar overlay.
+        Builder(
+          builder: (context) {
+            return ScaleBarLayer(camera: _mapController.camera);
+          },
+        ),
 
-          // Route navigation overlay (XTE, bearing, distance, ETA).
-          if (navData != null)
-            Positioned(
-              bottom: _instrumentsVisible ? 220 : 16,
-              left: 16,
-              right: 80,
-              child: _RouteNavOverlay(navData: navData),
-            ),
-
-          // Top-right controls: connection dot, night mode, course-up
+        // Route navigation overlay (XTE, bearing, distance, ETA).
+        if (navData != null)
           Positioned(
-            top: topPadding + 8,
-            right: 8,
-            child: Column(
-              children: [
-                // Connection status dot
-                Container(
-                  width: 28,
-                  height: 28,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.5),
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: connectionState == NmeaConnectionState.connected
-                            ? Colors.green
-                            : connectionState ==
-                                        NmeaConnectionState.connecting ||
-                                    connectionState ==
-                                        NmeaConnectionState.reconnecting
-                                ? Colors.amber
-                                : Colors.red,
+            bottom: _instrumentsVisible
+                ? 220 + safePadding.bottom
+                : Spacing.md + safePadding.bottom,
+            left: Spacing.md + safePadding.left,
+            right: 80 + safePadding.right,
+            child: _RouteNavOverlay(navData: navData),
+          ),
+
+        // Top-right controls inside SafeArea
+        Positioned(
+          top: safePadding.top + Spacing.sm,
+          right: safePadding.right + Spacing.sm,
+          child: Column(
+            children: [
+              // Connection status dot
+              SizedBox(
+                width: Spacing.minTapTarget,
+                height: Spacing.minTapTarget,
+                child: Center(
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.5),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              connectionState == NmeaConnectionState.connected
+                                  ? Colors.green
+                                  : connectionState ==
+                                              NmeaConnectionState.connecting ||
+                                          connectionState ==
+                                              NmeaConnectionState.reconnecting
+                                      ? Colors.amber
+                                      : Colors.red,
+                        ),
                       ),
                     ),
                   ),
                 ),
-                // Night mode toggle
-                FloatingActionButton.small(
+              ),
+              // Night mode toggle
+              SizedBox(
+                width: Spacing.minTapTarget,
+                height: Spacing.minTapTarget,
+                child: FloatingActionButton.small(
                   heroTag: 'nightMode',
                   onPressed: () {
+                    HapticFeedback.selectionClick();
                     ref.read(appSettingsProvider.notifier).toggleNightMode();
                   },
                   child: Icon(
@@ -285,11 +338,16 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                         : Icons.dark_mode_outlined,
                   ),
                 ),
-                const SizedBox(height: 8),
-                // Course-up toggle
-                FloatingActionButton.small(
+              ),
+              const SizedBox(height: Spacing.sm),
+              // Course-up toggle
+              SizedBox(
+                width: Spacing.minTapTarget,
+                height: Spacing.minTapTarget,
+                child: FloatingActionButton.small(
                   heroTag: 'courseUp',
                   onPressed: () {
+                    HapticFeedback.selectionClick();
                     final toggled = !ref.read(courseUpProvider);
                     ref.read(courseUpProvider.notifier).state = toggled;
                     if (!toggled) {
@@ -300,16 +358,24 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                     courseUp ? Icons.navigation : Icons.navigation_outlined,
                   ),
                 ),
-                const SizedBox(height: 8),
-                // Weather overlay toggles
-                _WeatherToggleButton(ref: ref),
-              ],
-            ),
+              ),
+              const SizedBox(height: Spacing.sm),
+              // Weather overlay toggle
+              SizedBox(
+                width: Spacing.minTapTarget,
+                height: Spacing.minTapTarget,
+                child: _WeatherToggleButton(ref: ref),
+              ),
+            ],
           ),
+        ),
 
-          // Instrument panel toggle (bottom center)
+        // Instrument panel toggle (bottom center) — hide in landscape
+        if (!isLandscape)
           Positioned(
-            bottom: _instrumentsVisible ? 200 : 8,
+            bottom: _instrumentsVisible
+                ? 200 + safePadding.bottom
+                : Spacing.sm + safePadding.bottom,
             left: 0,
             right: 0,
             child: Center(
@@ -319,17 +385,16 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                 onVerticalDragEnd: (details) {
                   if (details.primaryVelocity != null) {
                     if (details.primaryVelocity! < 0) {
-                      // Swipe up — show
                       setState(() => _instrumentsVisible = true);
                     } else {
-                      // Swipe down — hide
                       setState(() => _instrumentsVisible = false);
                     }
                   }
                 },
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  width: Spacing.minTapTarget * 2,
+                  height: Spacing.minTapTarget,
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
@@ -346,12 +411,14 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             ),
           ),
 
-          // Slide-up instrument panel
-          if (_instrumentsVisible)
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+        // Slide-up instrument panel — hide in landscape
+        if (_instrumentsVisible && !isLandscape)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              top: false,
               child: GestureDetector(
                 onVerticalDragEnd: (details) {
                   if (details.primaryVelocity != null &&
@@ -362,84 +429,101 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                 child: const InstrumentPanel(),
               ),
             ),
+          ),
 
-          // CPA alarm red flash overlay
-          if (_cpaAlarmFlash)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  color: Colors.red.withValues(alpha: 0.25),
-                ),
+        // CPA alarm red flash overlay
+        if (_cpaAlarmFlash)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                color: Colors.red.withValues(alpha: 0.25),
+              ),
+            ),
+          ),
+
+        // FAB area — inside SafeArea padding
+        Positioned(
+          bottom: safePadding.bottom + Spacing.md,
+          right: safePadding.right + Spacing.md,
+          child: _buildFab(context, ref),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFab(BuildContext context, WidgetRef ref) {
+    final anchor = ref.watch(anchorProvider);
+
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (anchor.isActive) ...[
+            // Release anchor button.
+            SizedBox(
+              width: Spacing.minTapTarget,
+              height: Spacing.minTapTarget,
+              child: FloatingActionButton.small(
+                heroTag: 'releaseAnchor',
+                backgroundColor: Colors.red,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(anchorProvider.notifier).releaseAnchor();
+                },
+                child: const Icon(Icons.clear, color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+            // Anchor info button.
+            SizedBox(
+              width: Spacing.minTapTarget,
+              height: Spacing.minTapTarget,
+              child: FloatingActionButton.small(
+                heroTag: 'anchorInfo',
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AnchorScreen()),
+                  );
+                },
+                child: const Icon(Icons.anchor),
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+          ] else ...[
+            SizedBox(
+              width: Spacing.minTapTarget,
+              height: Spacing.minTapTarget,
+              child: FloatingActionButton.small(
+                heroTag: 'setAnchor',
+                onPressed: () {
+                  HapticFeedback.heavyImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AnchorScreen()),
+                  );
+                },
+                child: const Icon(Icons.anchor),
+              ),
+            ),
+            const SizedBox(height: Spacing.sm),
+          ],
+          if (!_followVessel)
+            SizedBox(
+              width: Spacing.minTapTarget,
+              height: Spacing.minTapTarget,
+              child: FloatingActionButton(
+                heroTag: 'centreVessel',
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  _centreOnVessel();
+                },
+                child: const Icon(Icons.my_location),
               ),
             ),
         ],
       ),
-      // Multi-action FAB: centre-on-vessel, anchor controls.
-      floatingActionButton: _buildFab(context, ref),
-    );
-  }
-
-  Widget? _buildFab(BuildContext context, WidgetRef ref) {
-    final anchor = ref.watch(anchorProvider);
-
-    // If following vessel and no anchor active, show nothing (clean map).
-    if (_followVessel && !anchor.isActive) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Anchor set button.
-          FloatingActionButton.small(
-            heroTag: 'setAnchor',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnchorScreen()),
-            ),
-            child: const Icon(Icons.anchor),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (anchor.isActive) ...[
-          // Release anchor button.
-          FloatingActionButton.small(
-            heroTag: 'releaseAnchor',
-            backgroundColor: Colors.red,
-            onPressed: () => ref.read(anchorProvider.notifier).releaseAnchor(),
-            child: const Icon(Icons.clear, color: Colors.white),
-          ),
-          const SizedBox(height: 8),
-          // Anchor info button.
-          FloatingActionButton.small(
-            heroTag: 'anchorInfo',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnchorScreen()),
-            ),
-            child: const Icon(Icons.anchor),
-          ),
-          const SizedBox(height: 8),
-        ] else ...[
-          FloatingActionButton.small(
-            heroTag: 'setAnchor',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AnchorScreen()),
-            ),
-            child: const Icon(Icons.anchor),
-          ),
-          const SizedBox(height: 8),
-        ],
-        if (!_followVessel)
-          FloatingActionButton(
-            heroTag: 'centreVessel',
-            onPressed: _centreOnVessel,
-            child: const Icon(Icons.my_location),
-          ),
-      ],
     );
   }
 }
@@ -467,6 +551,7 @@ class _WeatherToggleButton extends StatelessWidget {
     return FloatingActionButton.small(
       heroTag: 'weatherToggle',
       onPressed: () {
+        HapticFeedback.selectionClick();
         final next = WeatherOverlay.values[
             (overlay.index + 1) % WeatherOverlay.values.length];
         ref.read(weatherOverlayProvider.notifier).state = next;
@@ -524,7 +609,7 @@ class _RouteNavOverlay extends StatelessWidget {
             label,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
           ),
