@@ -1,0 +1,13 @@
+FlutterPlotter is an open-source marine chart plotter built for sailors who want a simple, touch-first navigation experience on their phone or tablet.
+
+Features:
+- OpenStreetMap + OpenSeaMap charts with course-up mode
+- Real-time GPS vessel tracking
+- NMEA 0183 input over TCP/UDP for heading, depth, wind, and speed
+- AIS target display with CPA/TCPA collision alarms
+- Route and waypoint management with GPX import/export
+- Instrument panel showing SOG, COG, heading, depth, wind, and cross-track error
+- Offline chart tile downloads for sailing without internet
+- Night mode with red-tinted display to preserve dark adaptation
+
+Connect to your boat's NMEA multiplexer or Wi-Fi gateway to receive live instrument data, or use the built-in GPS for basic position tracking.

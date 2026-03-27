@@ -1,0 +1,1 @@
+marine,chart,plotter,sailing,navigation,AIS,NMEA,GPS,nautical,boat
