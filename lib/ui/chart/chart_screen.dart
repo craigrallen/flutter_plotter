@@ -9,16 +9,22 @@ import '../../data/models/ais_target.dart';
 import '../../data/models/vessel_state.dart';
 import '../../data/models/waypoint.dart';
 import '../../data/providers/ais_provider.dart';
+import '../../data/providers/anchor_provider.dart';
 import '../../data/providers/chart_tile_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
 import '../../data/providers/route_provider.dart';
 import '../../data/providers/settings_provider.dart';
 import '../../data/providers/vessel_provider.dart';
+import '../../data/providers/weather_provider.dart';
+import '../anchor/anchor_screen.dart';
 import '../instruments/instrument_panel.dart';
+import 'layers/anchor_layer.dart';
+import 'layers/tide_layer.dart';
 import 'layers/vessel_layer.dart';
 import 'layers/ais_layer.dart';
 import 'layers/route_layer.dart';
 import 'layers/scale_bar_layer.dart';
+import 'layers/weather_layer.dart';
 
 /// Whether course-up mode is active (map rotates to match COG).
 final courseUpProvider = StateProvider<bool>((ref) => false);
@@ -208,7 +214,10 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               children: [
                 _baseLayer.tileLayer,
                 _seaLayer.tileLayer,
+                const RepaintBoundary(child: WeatherLayer()),
+                const RepaintBoundary(child: TideLayer()),
                 RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
+                const RepaintBoundary(child: AnchorLayer()),
                 RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
                 RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
               ],
@@ -291,6 +300,9 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                     courseUp ? Icons.navigation : Icons.navigation_outlined,
                   ),
                 ),
+                const SizedBox(height: 8),
+                // Weather overlay toggles
+                _WeatherToggleButton(ref: ref),
               ],
             ),
           ),
@@ -362,14 +374,104 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             ),
         ],
       ),
-      // Centre-on-vessel FAB.
-      floatingActionButton: _followVessel
-          ? null
-          : FloatingActionButton(
-              heroTag: 'centreVessel',
-              onPressed: _centreOnVessel,
-              child: const Icon(Icons.my_location),
+      // Multi-action FAB: centre-on-vessel, anchor controls.
+      floatingActionButton: _buildFab(context, ref),
+    );
+  }
+
+  Widget? _buildFab(BuildContext context, WidgetRef ref) {
+    final anchor = ref.watch(anchorProvider);
+
+    // If following vessel and no anchor active, show nothing (clean map).
+    if (_followVessel && !anchor.isActive) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Anchor set button.
+          FloatingActionButton.small(
+            heroTag: 'setAnchor',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AnchorScreen()),
             ),
+            child: const Icon(Icons.anchor),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (anchor.isActive) ...[
+          // Release anchor button.
+          FloatingActionButton.small(
+            heroTag: 'releaseAnchor',
+            backgroundColor: Colors.red,
+            onPressed: () => ref.read(anchorProvider.notifier).releaseAnchor(),
+            child: const Icon(Icons.clear, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          // Anchor info button.
+          FloatingActionButton.small(
+            heroTag: 'anchorInfo',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AnchorScreen()),
+            ),
+            child: const Icon(Icons.anchor),
+          ),
+          const SizedBox(height: 8),
+        ] else ...[
+          FloatingActionButton.small(
+            heroTag: 'setAnchor',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AnchorScreen()),
+            ),
+            child: const Icon(Icons.anchor),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (!_followVessel)
+          FloatingActionButton(
+            heroTag: 'centreVessel',
+            onPressed: _centreOnVessel,
+            child: const Icon(Icons.my_location),
+          ),
+      ],
+    );
+  }
+}
+
+/// Weather overlay toggle button: cycles Off → Wind → Waves → Off.
+class _WeatherToggleButton extends StatelessWidget {
+  final WidgetRef ref;
+
+  const _WeatherToggleButton({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final overlay = ref.watch(weatherOverlayProvider);
+
+    IconData icon;
+    switch (overlay) {
+      case WeatherOverlay.wind:
+        icon = Icons.air;
+      case WeatherOverlay.waves:
+        icon = Icons.waves;
+      case WeatherOverlay.off:
+        icon = Icons.cloud_off;
+    }
+
+    return FloatingActionButton.small(
+      heroTag: 'weatherToggle',
+      onPressed: () {
+        final next = WeatherOverlay.values[
+            (overlay.index + 1) % WeatherOverlay.values.length];
+        ref.read(weatherOverlayProvider.notifier).state = next;
+      },
+      child: Icon(icon),
     );
   }
 }

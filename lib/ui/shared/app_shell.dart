@@ -9,6 +9,7 @@ import '../routes/route_list_screen.dart';
 import '../ais/target_list_screen.dart';
 import '../settings/settings_screen.dart';
 import '../signalk/signalk_dashboard.dart';
+import '../weather/weather_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
@@ -25,6 +26,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     RouteListScreen(),
     TargetListScreen(),
     SignalKDashboard(),
+    WeatherScreen(),
     SettingsScreen(),
   ];
 
@@ -67,6 +69,8 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
             label: 'Signal K',
           ),
+          const NavigationDestination(
+              icon: Icon(Icons.cloud), label: 'Weather'),
           const NavigationDestination(
               icon: Icon(Icons.settings), label: 'Settings'),
         ],
