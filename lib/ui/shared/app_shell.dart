@@ -20,6 +20,7 @@ import '../floatilla/floatilla_shell.dart';
 import '../floatilla/mob_overlay.dart';
 import '../floatilla/polar_performance_screen.dart';
 import '../floatilla/tidal_currents_screen.dart';
+import '../floatilla/ais_cpa_screen.dart';
 import '../floatilla/ais_history_trail_screen.dart';
 import '../floatilla/deviation_table_screen.dart';
 import '../floatilla/race_start_timer_screen.dart';
@@ -96,6 +97,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     PolarPerformanceScreen(),
     TidalCurrentsScreen(),
     AisHistoryTrailScreen(),
+    AisCpaScreen(),
     DeviationTableScreen(),
     RaceStartTimerScreen(),
     DeadReckoningScreen(),
@@ -319,6 +321,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.history), label: 'AIS Trail'),
       const NavigationDestination(
+          icon: Icon(Icons.warning_amber), label: 'Collision'),
+      const NavigationDestination(
           icon: Icon(Icons.explore), label: 'Deviation'),
       const NavigationDestination(
           icon: Icon(Icons.flag), label: 'Race'),
@@ -380,6 +384,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.waves), label: Text('Currents')),
       const NavigationRailDestination(
           icon: Icon(Icons.history), label: Text('AIS Trail')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.warning_amber), label: Text('Collision')),
       const NavigationRailDestination(
           icon: Icon(Icons.explore), label: Text('Deviation')),
       const NavigationRailDestination(
