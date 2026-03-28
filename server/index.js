@@ -95,6 +95,9 @@ async function initDb() {
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT false').catch(() => {});
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT').catch(() => {});
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_platform TEXT').catch(() => {});
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN DEFAULT false').catch(() => {});
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT').catch(() => {});
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT \'{}\'').catch(() => {});
   await pool.query(`
     CREATE TABLE IF NOT EXISTS routes (
       id SERIAL PRIMARY KEY,
@@ -773,4 +776,104 @@ app.post('/waypoints', authMiddleware, async (req, res) => {
 app.delete('/waypoints/:id', authMiddleware, async (req, res) => {
   await pool.query('DELETE FROM saved_waypoints WHERE id=$1 AND user_id=$2', [req.params.id, req.userId]);
   res.json({ ok: true });
+});
+
+// ── Feature Flags ───────────────────────────────────────────────────────────
+
+app.get('/features', authMiddleware, async (req, res) => {
+  const result = await pool.query('SELECT is_pro, feature_flags FROM users WHERE id=$1', [req.userId]);
+  const user = result.rows[0];
+  const flags = user?.feature_flags || {};
+  const defaultFlags = {
+    pro_features: user?.is_pro || false,
+    weather_overlay: true,
+    tidal_currents: user?.is_pro || false,
+    polar_performance: user?.is_pro || false,
+    ais_history: true,
+    deviation_table: true,
+    race_timer: true,
+    dead_reckoning: true,
+    celestial_nav: user?.is_pro || false,
+    sar_patterns: user?.is_pro || false,
+    radar_simulator: user?.is_pro || false,
+    nmea_mux: true,
+  };
+  res.json({ ...defaultFlags, ...flags });
+});
+
+// ── Stripe Subscription (stub) ─────────────────────────────────────────────
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+app.post('/subscription/create', authMiddleware, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+  try {
+    const user = await pool.query('SELECT email FROM users WHERE id=$1', [req.userId]);
+    const email = user.rows[0]?.email;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    
+    // Create or retrieve customer
+    let customer = await pool.query('SELECT stripe_customer_id FROM users WHERE id=$1', [req.userId]);
+    let customerId = customer.rows[0]?.stripe_customer_id;
+    if (!customerId) {
+      const stripeCustomer = await stripe.customers.create({ email });
+      customerId = stripeCustomer.id;
+      await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [customerId, req.userId]);
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{
+        price: process.env.STRIPE_PRICE_ID || 'price_1234',
+        quantity: 1,
+      }],
+      mode: 'subscription',
+      success_url: `${req.headers.origin || 'https://floatilla.app'}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin || 'https://floatilla.app'}/account`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) return res.sendStatus(400);
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!webhookSecret) return res.sendStatus(500);
+
+  try {
+    const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    if (event.type === 'checkout.session.completed' || event.type === 'invoice.payment_succeeded') {
+      const customerId = event.data.object.customer;
+      await pool.query('UPDATE users SET is_pro=true WHERE stripe_customer_id=$1', [customerId]);
+      console.log(`[Stripe] User upgraded to Pro: ${customerId}`);
+    } else if (event.type === 'customer.subscription.deleted') {
+      const customerId = event.data.object.customer;
+      await pool.query('UPDATE users SET is_pro=false WHERE stripe_customer_id=$1', [customerId]);
+      console.log(`[Stripe] User downgraded: ${customerId}`);
+    }
+    res.sendStatus(200);
+  } catch (e) {
+    console.error('[Stripe webhook error]', e.message);
+    res.sendStatus(400);
+  }
+});
+
+// ── Tidal/Weather Proxies (stub endpoints for future implementation) ───────
+
+app.get('/proxy/tides', async (req, res) => {
+  // TODO: proxy to NOAA CO-OPS or similar
+  // For now, return empty
+  res.json({ stations: [], message: 'Tidal proxy not yet implemented' });
+});
+
+app.get('/proxy/weather', async (req, res) => {
+  // TODO: proxy to Open-Meteo or ECMWF
+  res.json({ forecast: [], message: 'Weather proxy not yet implemented' });
 });
