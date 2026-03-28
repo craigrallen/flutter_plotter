@@ -413,6 +413,82 @@ app.post('/friends/remove', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Friend Tracks ─────────────────────────────────────────────────────────────
+
+// GET /friends/:username/tracks
+// Returns up to 10 recent voyages for a friend (friendship required).
+// Each voyage includes id, voyage_id, start_time, end_time, distance_nm,
+// and track_points as [[lat, lng, ts_unix], ...].
+app.get('/friends/:username/tracks', authMiddleware, async (req, res) => {
+  const { username } = req.params;
+
+  // Resolve target user
+  const targetRes = await pool.query(
+    'SELECT id, username, vessel_name FROM users WHERE username = $1',
+    [username]
+  );
+  if (!targetRes.rows.length) return res.status(404).json({ error: 'User not found' });
+  const target = targetRes.rows[0];
+
+  // Verify friendship (accepted in either direction)
+  const friendshipRes = await pool.query(`
+    SELECT id FROM friendships
+    WHERE ((user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1))
+      AND status = 'accepted'
+  `, [req.userId, target.id]);
+  if (!friendshipRes.rows.length) {
+    return res.status(403).json({ error: 'Not friends with this user' });
+  }
+
+  // Fetch last 10 voyages from ship_log_entries grouped by voyage_id
+  const voyagesRes = await pool.query(`
+    SELECT
+      voyage_id,
+      MIN(logged_at) AS start_time,
+      MAX(logged_at) AS end_time,
+      COUNT(*) AS entry_count
+    FROM ship_log_entries
+    WHERE user_id = $1 AND deleted = false AND voyage_id IS NOT NULL
+    GROUP BY voyage_id
+    ORDER BY MAX(logged_at) DESC
+    LIMIT 10
+  `, [target.id]);
+
+  const voyages = [];
+  for (const v of voyagesRes.rows) {
+    const entriesRes = await pool.query(`
+      SELECT position_lat, position_lng, logged_at, speed
+      FROM ship_log_entries
+      WHERE user_id = $1 AND voyage_id = $2 AND deleted = false
+        AND position_lat IS NOT NULL AND position_lng IS NOT NULL
+      ORDER BY logged_at ASC
+      LIMIT 500
+    `, [target.id, v.voyage_id]);
+
+    const trackPoints = entriesRes.rows.map(r => [r.position_lat, r.position_lng, r.logged_at]);
+
+    // Estimate distance
+    let distNm = 0;
+    for (let i = 1; i < trackPoints.length; i++) {
+      distNm += haversineNmLocal(
+        trackPoints[i-1][0], trackPoints[i-1][1],
+        trackPoints[i][0], trackPoints[i][1]
+      );
+    }
+
+    voyages.push({
+      id: v.voyage_id,
+      voyage_id: v.voyage_id,
+      start_time: parseInt(v.start_time),
+      end_time: parseInt(v.end_time),
+      distance_nm: parseFloat(distNm.toFixed(2)),
+      track_points: trackPoints,
+    });
+  }
+
+  res.json(voyages);
+});
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 app.get('/messages', authMiddleware, async (req, res) => {

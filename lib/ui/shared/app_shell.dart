@@ -36,6 +36,10 @@ import '../floatilla/anchor_scope_screen.dart';
 import '../floatilla/anchorage_screen.dart';
 import '../floatilla/departure_planner_screen.dart';
 import '../floatilla/tidal_gate_screen.dart';
+import '../floatilla/cloud_logbook_screen.dart';
+import '../floatilla/boat_health_screen.dart';
+import '../floatilla/track_comparison_screen.dart';
+import '../floatilla/voyage_logger_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -115,6 +119,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     AnchorageScreen(),
     DeparturePlannerScreen(),
     TidalGateScreen(),
+    CloudLogbookScreen(),
+    BoatHealthScreen(),
+    TrackComparisonScreen(),
+    VoyageLoggerScreen(),
     SettingsScreen(),
   ];
 
@@ -357,6 +365,14 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.water), label: 'Tidal Gates'),
       const NavigationDestination(
+          icon: Icon(Icons.menu_book), label: 'Log'),
+      const NavigationDestination(
+          icon: Icon(Icons.monitor_heart), label: 'Health'),
+      const NavigationDestination(
+          icon: Icon(Icons.compare_arrows), label: 'Compare'),
+      const NavigationDestination(
+          icon: Icon(Icons.directions_boat), label: 'Voyage'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -426,6 +442,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.calendar_today), label: Text('Depart')),
       const NavigationRailDestination(
           icon: Icon(Icons.water), label: Text('Tidal Gates')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.menu_book), label: Text('Log')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.monitor_heart), label: Text('Health')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.compare_arrows), label: Text('Compare')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.directions_boat), label: Text('Voyage')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
