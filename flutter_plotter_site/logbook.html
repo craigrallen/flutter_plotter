@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floatilla Logbook</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+    header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 24px; display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 18px; font-weight: 600; }
+    .badge { background: #1f6feb; color: #fff; border-radius: 12px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+    main { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+    /* Login */
+    #login-section { max-width: 380px; margin: 80px auto; }
+    #login-section h2 { font-size: 22px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+    .form-group input { width: 100%; background: #161b22; border: 1px solid #30363d; border-radius: 6px; color: #e6edf3; padding: 10px 12px; font-size: 14px; }
+    .form-group input:focus { outline: none; border-color: #1f6feb; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; background: #1f6feb; color: #fff; border: none; border-radius: 6px; padding: 10px 18px; font-size: 14px; font-weight: 500; cursor: pointer; }
+    .btn:hover { background: #388bfd; }
+    .btn-outline { background: transparent; border: 1px solid #30363d; color: #e6edf3; }
+    .btn-outline:hover { background: #21262d; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .error-msg { color: #f85149; font-size: 13px; margin-top: 10px; }
+    /* Tabs */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid #30363d; margin-bottom: 24px; }
+    .tab-btn { background: none; border: none; color: #8b949e; padding: 10px 20px; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab-btn.active { color: #e6edf3; border-bottom-color: #1f6feb; font-weight: 500; }
+    .tab-btn:hover { color: #e6edf3; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    /* Cards */
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+    .card-header { padding: 14px 18px; display: flex; align-items: flex-start; gap: 14px; cursor: pointer; }
+    .card-header:hover { background: #1c2128; }
+    .card-body { padding: 0 18px 14px 18px; border-top: 1px solid #30363d; }
+    .entry-date { font-weight: 600; font-size: 15px; min-width: 120px; }
+    .entry-meta { flex: 1; }
+    .entry-meta small { color: #8b949e; font-size: 12px; }
+    .entry-notes { margin-top: 8px; font-size: 14px; line-height: 1.5; color: #c9d1d9; white-space: pre-wrap; }
+    .stat-row { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px 0; }
+    .stat { display: flex; flex-direction: column; }
+    .stat-label { font-size: 11px; color: #8b949e; }
+    .stat-value { font-size: 14px; font-weight: 600; }
+    .voyage-entries { display: none; }
+    .voyage-entries.open { display: block; }
+    .ship-entry { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+    .ship-entry:last-child { border-bottom: none; }
+    .ship-entry-time { color: #8b949e; min-width: 60px; font-size: 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { background: #21262d; border-radius: 4px; padding: 2px 8px; font-size: 12px; color: #c9d1d9; }
+    /* Map */
+    #voyage-map-container { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; }
+    #voyage-map-container.open { display: flex; }
+    #voyage-map-wrapper { background: #161b22; border-radius: 12px; width: min(900px, 95vw); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+    #voyage-map-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; }
+    #voyage-map { flex: 1; min-height: 400px; }
+    .loading { text-align: center; padding: 40px; color: #8b949e; }
+    .upsell { background: #1f2937; border: 1px solid #1f6feb; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px; }
+    .upsell p { flex: 1; font-size: 14px; }
+    .tag-pro { background: #1f6feb33; color: #58a6ff; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 500; }
+  </style>
+  <!-- Leaflet for map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+<header>
+  <svg width="24" height="24" fill="none" stroke="#1f6feb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 17l9-13 9 13H3z"/><path d="M3 17a9 9 0 0018 0"/></svg>
+  <h1>Floatilla Logbook</h1>
+  <span class="badge">Logbook Pro</span>
+  <div style="flex:1"></div>
+  <button class="btn btn-outline btn-sm" id="logout-btn" style="display:none">Sign out</button>
+</header>
+
+<main>
+  <!-- Login -->
+  <div id="login-section">
+    <h2>Sign in to your logbook</h2>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="username" placeholder="Your Floatilla username" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    </div>
+    <button class="btn" id="login-btn">Sign in</button>
+    <div class="error-msg" id="login-error"></div>
+  </div>
+
+  <!-- Content -->
+  <div id="content-section" style="display:none">
+    <div id="upsell-banner" class="upsell" style="display:none">
+      <span>&#128274;</span>
+      <p>Cloud sync requires <span class="tag-pro">Logbook Pro</span> — $0.99/month. Subscribe in the Floatilla app.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="captains">Captain's Log</button>
+      <button class="tab-btn" data-tab="voyages">Ship's Log / Voyages</button>
+    </div>
+
+    <div id="tab-captains" class="tab-pane active">
+      <div id="captains-loading" class="loading">Loading...</div>
+      <div id="captains-list"></div>
+    </div>
+
+    <div id="tab-voyages" class="tab-pane">
+      <div id="voyages-loading" class="loading">Loading...</div>
+      <div id="voyages-list"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Voyage map modal -->
+<div id="voyage-map-container">
+  <div id="voyage-map-wrapper">
+    <div id="voyage-map-header">
+      <span id="voyage-map-title" style="font-weight:600"></span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline btn-sm" id="voyage-gpx-btn">Export GPX</button>
+        <button class="btn btn-outline btn-sm" id="voyage-map-close">Close</button>
+      </div>
+    </div>
+    <div id="voyage-map"></div>
+    <div id="voyage-stats" class="stat-row" style="padding:12px 18px;border-top:1px solid #30363d"></div>
+  </div>
+</div>
+
+<script>
+const API = 'https://floatilla-fleet-social-production.up.railway.app';
+let token = localStorage.getItem('floatilla_logbook_token');
+let map = null;
+let currentVoyageEntries = [];
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+function setToken(t) {
+  token = t;
+  localStorage.setItem('floatilla_logbook_token', t);
+}
+
+function headers() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+async function checkAndLoad() {
+  if (!token) return showLogin();
+  const r = await fetch(API + '/logbook/status', { headers: headers() });
+  if (!r.ok) { return showLogin(); }
+  const status = await r.json();
+  showContent(status.logbook_pro);
+}
+
+function showLogin() {
+  document.getElementById('login-section').style.display = '';
+  document.getElementById('content-section').style.display = 'none';
+  document.getElementById('logout-btn').style.display = 'none';
+}
+
+function showContent(isPro) {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('content-section').style.display = '';
+  document.getElementById('logout-btn').style.display = '';
+  document.getElementById('upsell-banner').style.display = isPro ? 'none' : '';
+  if (isPro) {
+    loadCaptainsLog();
+    loadVoyages();
+  } else {
+    document.getElementById('captains-loading').textContent = 'Logbook Pro required.';
+    document.getElementById('voyages-loading').textContent = 'Logbook Pro required.';
+  }
+}
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (!username || !password) return;
+  document.getElementById('login-btn').textContent = 'Signing in...';
+  const r = await fetch(API + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  document.getElementById('login-btn').textContent = 'Sign in';
+  if (!r.ok) {
+    document.getElementById('login-error').textContent = 'Invalid username or password';
+    return;
+  }
+  const data = await r.json();
+  setToken(data.token);
+  await checkAndLoad();
+});
+
+document.getElementById('password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('login-btn').click();
+});
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  token = null;
+  localStorage.removeItem('floatilla_logbook_token');
+  showLogin();
+});
+
+// ── Captain's Log ─────────────────────────────────────────────────────────────
+
+async function loadCaptainsLog() {
+  const r = await fetch(API + '/captains-log?limit=100', { headers: headers() });
+  document.getElementById('captains-loading').style.display = 'none';
+  if (!r.ok) return;
+  const data = await r.json();
+  const entries = data.entries || [];
+  const container = document.getElementById('captains-list');
+  if (!entries.length) {
+    container.innerHTML = '<div class="loading">No captain\'s log entries yet.</div>';
+    return;
+  }
+  container.innerHTML = entries.map(e => captainCard(e)).join('');
+  container.querySelectorAll('.card-header').forEach(el => {
+    el.addEventListener('click', () => {
+      el.nextElementSibling.classList.toggle('open');
+    });
+  });
+}
+
+function captainCard(e) {
+  const date = formatDate(e.entry_date);
+  const pos = e.position_lat ? `${(+e.position_lat).toFixed(4)}, ${(+e.position_lng).toFixed(4)}` : '';
+  const weather = e.weather ? `<span class="chip">${esc(e.weather)}</span>` : '';
+  const crew = e.crew ? `<span class="chip">Crew: ${esc(e.crew)}</span>` : '';
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div class="entry-date">${date}</div>
+        <div class="entry-meta">
+          ${pos ? `<small>${pos}</small>` : ''}
+          <div class="chips" style="margin-top:4px">${weather}${crew}</div>
+        </div>
+      </div>
+      <div class="card-body voyage-entries">
+        <div class="entry-notes">${esc(e.notes || '')}</div>
+      </div>
+    </div>`;
+}
+
+// ── Voyages / Ship's Log ──────────────────────────────────────────────────────
+
+async function loadVoyages() {
+  const r = await fetch(API + '/ships-log/voyages', { headers: headers() });
+  document.getElementById('voyages-loading').style.display = 'none';
+  if (!r.ok) return;
+  const voyages = await r.json();
+  const container = document.getElementById('voyages-list');
+  if (!voyages.length) {
+    container.innerHTML = '<div class="loading">No voyages yet.</div>';
+    return;
+  }
+  container.innerHTML = voyages.map(v => voyageCard(v)).join('');
+  container.querySelectorAll('[data-voyage]').forEach(el => {
+    el.addEventListener('click', () => openVoyageMap(el.dataset.voyage));
+  });
+}
+
+function voyageCard(v) {
+  const start = formatTs(v.start_time);
+  const end = formatTs(v.end_time);
+  const dur = formatDuration((+v.end_time) - (+v.start_time));
+  const label = v.voyage_id.startsWith('voyage_') ? 'Voyage — ' + start : esc(v.voyage_id);
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:15px">${label}</div>
+          <div class="chips" style="margin-top:6px">
+            <span class="chip">${dur}</span>
+            <span class="chip">${v.entry_count} entries</span>
+          </div>
+          <small style="color:#8b949e">${start} — ${end}</small>
+        </div>
+        <button class="btn btn-sm btn-outline" data-voyage="${esc(v.voyage_id)}">View track</button>
+      </div>
+    </div>`;
+}
+
+// ── Voyage Map ─────────────────────────────────────────────────────────────────
+
+async function openVoyageMap(voyageId) {
+  document.getElementById('voyage-map-container').classList.add('open');
+  document.getElementById('voyage-map-title').textContent =
+    voyageId.startsWith('voyage_') ? 'Voyage Track' : voyageId;
+
+  // Load entries
+  const r = await fetch(API + '/ships-log?voyage_id=' + encodeURIComponent(voyageId) + '&limit=500', { headers: headers() });
+  if (!r.ok) return;
+  const entries = await r.json();
+  currentVoyageEntries = entries;
+
+  const withPos = entries.filter(e => e.position_lat != null)
+    .sort((a, b) => a.logged_at - b.logged_at);
+
+  // Init or reset map
+  if (!map) {
+    map = L.map('voyage-map', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(map);
+  } else {
+    map.eachLayer(l => { if (!(l instanceof L.TileLayer)) map.removeLayer(l); });
+  }
+
+  setTimeout(() => map.invalidateSize(), 50);
+
+  if (withPos.length > 1) {
+    const latlngs = withPos.map(e => [+e.position_lat, +e.position_lng]);
+    const polyline = L.polyline(latlngs, { color: '#1f6feb', weight: 3 }).addTo(map);
+    // Start/end markers
+    L.circleMarker(latlngs[0], { radius: 7, color: '#2ea043', fillColor: '#2ea043', fillOpacity: 1 })
+      .bindPopup('Start: ' + formatTs(withPos[0].logged_at)).addTo(map);
+    L.circleMarker(latlngs[latlngs.length - 1], { radius: 7, color: '#f85149', fillColor: '#f85149', fillOpacity: 1 })
+      .bindPopup('End: ' + formatTs(withPos[withPos.length - 1].logged_at)).addTo(map);
+    map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+  }
+
+  // Stats
+  const speeds = entries.filter(e => e.speed != null).map(e => +e.speed);
+  const maxSog = speeds.length ? Math.max(...speeds).toFixed(1) + ' kn' : 'n/a';
+  const avgSog = speeds.length ? (speeds.reduce((a, b) => a + b) / speeds.length).toFixed(1) + ' kn' : 'n/a';
+  const dur = entries.length > 1
+    ? formatDuration(entries[entries.length - 1].logged_at - entries[0].logged_at)
+    : 'n/a';
+
+  document.getElementById('voyage-stats').innerHTML = [
+    { label: 'Duration', value: dur },
+    { label: 'Max SOG', value: maxSog },
+    { label: 'Avg SOG', value: avgSog },
+    { label: 'Track points', value: withPos.length },
+  ].map(s => `<div class="stat"><span class="stat-label">${s.label}</span><span class="stat-value">${s.value}</span></div>`).join('');
+}
+
+document.getElementById('voyage-map-close').addEventListener('click', () => {
+  document.getElementById('voyage-map-container').classList.remove('open');
+});
+
+document.getElementById('voyage-gpx-btn').addEventListener('click', () => {
+  exportGpx(currentVoyageEntries);
+});
+
+function exportGpx(entries) {
+  const withPos = entries.filter(e => e.position_lat != null)
+    .sort((a, b) => a.logged_at - b.logged_at);
+  const trkpts = withPos.map(e => {
+    const dt = new Date(e.logged_at * 1000).toISOString();
+    const spd = e.speed ? `<speed>${(+e.speed * 0.514444).toFixed(2)}</speed>` : '';
+    return `    <trkpt lat="${e.position_lat}" lon="${e.position_lng}"><time>${dt}</time>${spd}</trkpt>`;
+  }).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Floatilla Web">\n  <trk><name>Floatilla Voyage</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'floatilla-voyage.gpx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function formatTs(ts) {
+  return new Date(+ts * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDuration(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+checkAndLoad();
+</script>
+</body>
+</html>
