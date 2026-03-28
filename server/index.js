@@ -91,6 +91,43 @@ async function initDb() {
       updated_at BIGINT NOT NULL DEFAULT 0
     )
   `);
+  // Logbook tables
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS captain_log_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entry_date TEXT NOT NULL,
+      position_lat DOUBLE PRECISION,
+      position_lng DOUBLE PRECISION,
+      weather TEXT,
+      crew TEXT,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      deleted BOOLEAN DEFAULT false
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ship_log_entries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      logged_at BIGINT NOT NULL,
+      position_lat DOUBLE PRECISION,
+      position_lng DOUBLE PRECISION,
+      course DOUBLE PRECISION,
+      speed DOUBLE PRECISION,
+      wind_speed DOUBLE PRECISION,
+      wind_direction DOUBLE PRECISION,
+      depth DOUBLE PRECISION,
+      barometer DOUBLE PRECISION,
+      engine_hours DOUBLE PRECISION,
+      fuel_remaining DOUBLE PRECISION,
+      notes TEXT,
+      voyage_id TEXT,
+      created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      deleted BOOLEAN DEFAULT false
+    )
+  `);
   // Migrations for existing deployments
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT false').catch(() => {});
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT').catch(() => {});
@@ -98,6 +135,7 @@ async function initDb() {
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_pro BOOLEAN DEFAULT false').catch(() => {});
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT').catch(() => {});
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS feature_flags JSONB DEFAULT \'{}\'').catch(() => {});
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS logbook_pro BOOLEAN DEFAULT false').catch(() => {});
   await pool.query(`
     CREATE TABLE IF NOT EXISTS routes (
       id SERIAL PRIMARY KEY,
@@ -137,6 +175,31 @@ async function initDb() {
       note TEXT,
       entry_type TEXT DEFAULT 'auto',
       created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `).catch(() => {});
+  // Anchorage check-ins
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS anchorage_checkins (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lat DOUBLE PRECISION NOT NULL,
+      lng DOUBLE PRECISION NOT NULL,
+      name TEXT,
+      checked_in_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      checked_out_at BIGINT
+    )
+  `).catch(() => {});
+  // Hazard reports
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS hazards (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lat DOUBLE PRECISION NOT NULL,
+      lng DOUBLE PRECISION NOT NULL,
+      type TEXT NOT NULL,
+      description TEXT,
+      created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT,
+      confirmed_count INTEGER NOT NULL DEFAULT 0
     )
   `).catch(() => {});
   console.log('Database schema ready');
@@ -411,6 +474,170 @@ app.post('/mob', authMiddleware, async (req, res) => {
   const payload = JSON.stringify({ type: 'mob', data: alert });
   wsClients.forEach(ws => { if (ws.readyState === 1) ws.send(payload); });
   res.json({ ok: true, alert });
+});
+
+// ── Anchorages ────────────────────────────────────────────────────────────────
+
+// 1 nautical mile ≈ 1852 m; haversine in nm
+function haversineNmLocal(lat1, lng1, lat2, lng2) {
+  const R = 3440.065;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+// POST /anchorages/checkin — { lat, lng, name? }
+app.post('/anchorages/checkin', authMiddleware, async (req, res) => {
+  const { lat, lng, name } = req.body;
+  if (lat == null || lng == null) return res.status(400).json({ error: 'lat/lng required' });
+
+  // Close any open check-in for this user first
+  await pool.query(
+    `UPDATE anchorage_checkins SET checked_out_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+     WHERE user_id = $1 AND checked_out_at IS NULL`,
+    [req.userId]
+  );
+
+  const result = await pool.query(
+    `INSERT INTO anchorage_checkins (user_id, lat, lng, name, checked_in_at)
+     VALUES ($1, $2, $3, $4, EXTRACT(EPOCH FROM NOW())::BIGINT) RETURNING id`,
+    [req.userId, lat, lng, name || null]
+  );
+  res.status(201).json({ ok: true, id: result.rows[0].id });
+});
+
+// POST /anchorages/checkout
+app.post('/anchorages/checkout', authMiddleware, async (req, res) => {
+  await pool.query(
+    `UPDATE anchorage_checkins SET checked_out_at = EXTRACT(EPOCH FROM NOW())::BIGINT
+     WHERE user_id = $1 AND checked_out_at IS NULL`,
+    [req.userId]
+  );
+  res.json({ ok: true });
+});
+
+// GET /anchorages/nearby — ?lat=&lng=&radiusNm=5
+app.get('/anchorages/nearby', async (req, res) => {
+  const { lat, lng, radiusNm } = req.query;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat/lng required' });
+
+  const centerLat = parseFloat(lat);
+  const centerLng = parseFloat(lng);
+  const radius = parseFloat(radiusNm) || 5;
+  const cutoff = Math.floor(Date.now() / 1000) - 12 * 3600; // 12h window
+
+  // Fetch all active check-ins in a bounding box, then filter by radius
+  const latDelta = radius / 60;
+  const lngDelta = radius / (60 * Math.cos(centerLat * Math.PI / 180));
+
+  const rows = await pool.query(
+    `SELECT ac.id, ac.lat, ac.lng, ac.name, ac.checked_in_at,
+            u.username, u.vessel_name
+     FROM anchorage_checkins ac
+     JOIN users u ON u.id = ac.user_id
+     WHERE ac.checked_out_at IS NULL
+       AND ac.checked_in_at > $1
+       AND ac.lat BETWEEN $2 AND $3
+       AND ac.lng BETWEEN $4 AND $5`,
+    [cutoff, centerLat - latDelta, centerLat + latDelta,
+     centerLng - lngDelta, centerLng + lngDelta]
+  );
+
+  // Cluster by ~0.3nm proximity
+  const CLUSTER_NM = 0.3;
+  const clusters = [];
+  for (const row of rows.rows) {
+    if (haversineNmLocal(centerLat, centerLng, row.lat, row.lng) > radius) continue;
+    let placed = false;
+    for (const c of clusters) {
+      if (haversineNmLocal(c.lat, c.lng, row.lat, row.lng) < CLUSTER_NM) {
+        c.boats.push({ username: row.username, vessel_name: row.vessel_name, checked_in_at: row.checked_in_at });
+        c.lat = (c.lat * c.boats.length + row.lat) / (c.boats.length + 1);
+        c.lng = (c.lng * c.boats.length + row.lng) / (c.boats.length + 1);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      clusters.push({
+        id: row.id,
+        lat: row.lat,
+        lng: row.lng,
+        name: row.name || 'Anchorage',
+        boats: [{ username: row.username, vessel_name: row.vessel_name, checked_in_at: row.checked_in_at }],
+      });
+    }
+  }
+
+  const result = clusters.map(c => ({
+    id: c.id,
+    lat: c.lat,
+    lng: c.lng,
+    name: c.name,
+    boat_count: c.boats.length,
+    boats: c.boats,
+    last_review: null, // placeholder for future reviews feature
+  }));
+
+  res.json(result);
+});
+
+// ── Hazards ───────────────────────────────────────────────────────────────────
+
+// POST /hazards — { lat, lng, type, description }
+app.post('/hazards', authMiddleware, async (req, res) => {
+  const { lat, lng, type, description } = req.body;
+  if (lat == null || lng == null || !type) return res.status(400).json({ error: 'lat, lng, type required' });
+  const result = await pool.query(
+    `INSERT INTO hazards (user_id, lat, lng, type, description, created_at)
+     VALUES ($1, $2, $3, $4, $5, EXTRACT(EPOCH FROM NOW())::BIGINT) RETURNING id`,
+    [req.userId, lat, lng, type, description || null]
+  );
+  res.status(201).json({ ok: true, id: result.rows[0].id });
+});
+
+// GET /hazards/nearby — ?lat=&lng=&radiusNm=20
+app.get('/hazards/nearby', async (req, res) => {
+  const { lat, lng, radiusNm } = req.query;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat/lng required' });
+
+  const centerLat = parseFloat(lat);
+  const centerLng = parseFloat(lng);
+  const radius = parseFloat(radiusNm) || 20;
+  const cutoff = Math.floor(Date.now() / 1000) - 24 * 3600; // 24h window
+
+  const latDelta = radius / 60;
+  const lngDelta = radius / (60 * Math.cos(centerLat * Math.PI / 180));
+
+  const result = await pool.query(
+    `SELECT h.id, h.lat, h.lng, h.type, h.description, h.created_at, h.confirmed_count,
+            u.username
+     FROM hazards h
+     JOIN users u ON u.id = h.user_id
+     WHERE h.created_at > $1
+       AND h.lat BETWEEN $2 AND $3
+       AND h.lng BETWEEN $4 AND $5`,
+    [cutoff, centerLat - latDelta, centerLat + latDelta,
+     centerLng - lngDelta, centerLng + lngDelta]
+  );
+
+  const filtered = result.rows.filter(r =>
+    haversineNmLocal(centerLat, centerLng, r.lat, r.lng) <= radius
+  );
+
+  res.json(filtered);
+});
+
+// POST /hazards/:id/confirm
+app.post('/hazards/:id/confirm', authMiddleware, async (req, res) => {
+  await pool.query(
+    'UPDATE hazards SET confirmed_count = confirmed_count + 1 WHERE id = $1',
+    [req.params.id]
+  );
+  res.json({ ok: true });
 });
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -863,12 +1090,27 @@ app.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (re
     const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     if (event.type === 'checkout.session.completed' || event.type === 'invoice.payment_succeeded') {
       const customerId = event.data.object.customer;
-      await pool.query('UPDATE users SET is_pro=true WHERE stripe_customer_id=$1', [customerId]);
-      console.log(`[Stripe] User upgraded to Pro: ${customerId}`);
+      const priceId = event.data.object.subscription
+        ? (await stripe.subscriptions.retrieve(event.data.object.subscription)).items.data[0]?.price?.id
+        : null;
+      const isLogbookPrice = priceId === process.env.STRIPE_LOGBOOK_PRICE_ID;
+      if (isLogbookPrice) {
+        await pool.query('UPDATE users SET logbook_pro=true WHERE stripe_customer_id=$1', [customerId]);
+        console.log(`[Stripe] User upgraded to Logbook Pro: ${customerId}`);
+      } else {
+        await pool.query('UPDATE users SET is_pro=true WHERE stripe_customer_id=$1', [customerId]);
+        console.log(`[Stripe] User upgraded to Pro: ${customerId}`);
+      }
     } else if (event.type === 'customer.subscription.deleted') {
       const customerId = event.data.object.customer;
-      await pool.query('UPDATE users SET is_pro=false WHERE stripe_customer_id=$1', [customerId]);
-      console.log(`[Stripe] User downgraded: ${customerId}`);
+      const priceId = event.data.object.items?.data[0]?.price?.id;
+      if (priceId === process.env.STRIPE_LOGBOOK_PRICE_ID) {
+        await pool.query('UPDATE users SET logbook_pro=false WHERE stripe_customer_id=$1', [customerId]);
+        console.log(`[Stripe] Logbook Pro cancelled: ${customerId}`);
+      } else {
+        await pool.query('UPDATE users SET is_pro=false WHERE stripe_customer_id=$1', [customerId]);
+        console.log(`[Stripe] User downgraded: ${customerId}`);
+      }
     }
     res.sendStatus(200);
   } catch (e) {
@@ -1006,4 +1248,224 @@ Be specific, practical, and concise. Use nautical terminology. Flag any safety-c
 
   // Fallback: OpenAI (not yet implemented)
   res.json({ briefing: 'OpenAI fallback not implemented yet.' });
+});
+
+// ── Cloud Logbook (Captain's Log + Ship's Log) ────────────────────────────
+
+function logbookProRequired(req, res, next) {
+  pool.query('SELECT logbook_pro FROM users WHERE id=$1', [req.userId])
+    .then(r => {
+      if (!r.rows[0]?.logbook_pro) {
+        return res.status(402).json({
+          error: 'Logbook Pro required',
+          upgrade_url: '/logbook/subscribe',
+        });
+      }
+      next();
+    })
+    .catch(() => res.status(500).json({ error: 'Server error' }));
+}
+
+// ── Captain's Log ─────────────────────────────────────────────────────────
+
+app.get('/captains-log', authMiddleware, logbookProRequired, async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const offset = (page - 1) * limit;
+  const result = await pool.query(
+    `SELECT * FROM captain_log_entries
+     WHERE user_id=$1 AND deleted=false
+     ORDER BY entry_date DESC, created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [req.userId, limit, offset]
+  );
+  const countRes = await pool.query(
+    'SELECT COUNT(*) FROM captain_log_entries WHERE user_id=$1 AND deleted=false',
+    [req.userId]
+  );
+  res.json({ entries: result.rows, total: parseInt(countRes.rows[0].count), page, limit });
+});
+
+app.get('/captains-log/sync', authMiddleware, logbookProRequired, async (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  const result = await pool.query(
+    `SELECT * FROM captain_log_entries
+     WHERE user_id=$1 AND updated_at > $2
+     ORDER BY updated_at ASC`,
+    [req.userId, since]
+  );
+  res.json(result.rows);
+});
+
+app.post('/captains-log', authMiddleware, logbookProRequired, async (req, res) => {
+  const { entry_date, position_lat, position_lng, weather, crew, notes } = req.body;
+  if (!entry_date) return res.status(400).json({ error: 'entry_date required' });
+  const now = Math.floor(Date.now() / 1000);
+  const result = await pool.query(
+    `INSERT INTO captain_log_entries
+       (user_id, entry_date, position_lat, position_lng, weather, crew, notes, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING *`,
+    [req.userId, entry_date, position_lat||null, position_lng||null,
+     weather||null, crew||null, notes||'', now]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
+app.put('/captains-log/:id', authMiddleware, logbookProRequired, async (req, res) => {
+  const { entry_date, position_lat, position_lng, weather, crew, notes } = req.body;
+  const now = Math.floor(Date.now() / 1000);
+  const result = await pool.query(
+    `UPDATE captain_log_entries
+     SET entry_date=$1, position_lat=$2, position_lng=$3, weather=$4, crew=$5,
+         notes=$6, updated_at=$7
+     WHERE id=$8 AND user_id=$9 AND deleted=false
+     RETURNING *`,
+    [entry_date, position_lat||null, position_lng||null, weather||null,
+     crew||null, notes||'', now, req.params.id, req.userId]
+  );
+  if (!result.rows[0]) return res.status(404).json({ error: 'Not found' });
+  res.json(result.rows[0]);
+});
+
+app.delete('/captains-log/:id', authMiddleware, logbookProRequired, async (req, res) => {
+  const now = Math.floor(Date.now() / 1000);
+  await pool.query(
+    'UPDATE captain_log_entries SET deleted=true, updated_at=$1 WHERE id=$2 AND user_id=$3',
+    [now, req.params.id, req.userId]
+  );
+  res.json({ ok: true });
+});
+
+// ── Ship's Log ────────────────────────────────────────────────────────────
+
+app.get('/ships-log/voyages', authMiddleware, logbookProRequired, async (req, res) => {
+  const result = await pool.query(
+    `SELECT
+       voyage_id,
+       MIN(logged_at) AS start_time,
+       MAX(logged_at) AS end_time,
+       COUNT(*) AS entry_count,
+       MIN(position_lat) AS min_lat,
+       MAX(position_lat) AS max_lat,
+       MIN(position_lng) AS min_lng,
+       MAX(position_lng) AS max_lng
+     FROM ship_log_entries
+     WHERE user_id=$1 AND deleted=false AND voyage_id IS NOT NULL
+     GROUP BY voyage_id
+     ORDER BY MIN(logged_at) DESC`,
+    [req.userId]
+  );
+  res.json(result.rows);
+});
+
+app.get('/ships-log/sync', authMiddleware, logbookProRequired, async (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  const result = await pool.query(
+    `SELECT * FROM ship_log_entries
+     WHERE user_id=$1 AND created_at > $2
+     ORDER BY created_at ASC`,
+    [req.userId, since]
+  );
+  res.json(result.rows);
+});
+
+app.get('/ships-log', authMiddleware, logbookProRequired, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const before = req.query.before ? parseInt(req.query.before) : null;
+  const voyageId = req.query.voyage_id || null;
+
+  let queryStr = `SELECT * FROM ship_log_entries WHERE user_id=$1 AND deleted=false`;
+  const params = [req.userId];
+  let pIdx = 2;
+
+  if (before) {
+    queryStr += ` AND logged_at < $${pIdx++}`;
+    params.push(before);
+  }
+  if (voyageId) {
+    queryStr += ` AND voyage_id = $${pIdx++}`;
+    params.push(voyageId);
+  }
+  queryStr += ` ORDER BY logged_at DESC LIMIT $${pIdx}`;
+  params.push(limit);
+
+  const result = await pool.query(queryStr, params);
+  res.json(result.rows);
+});
+
+app.post('/ships-log', authMiddleware, logbookProRequired, async (req, res) => {
+  const entries = Array.isArray(req.body) ? req.body : [req.body];
+  const now = Math.floor(Date.now() / 1000);
+  const inserted = [];
+
+  for (const e of entries) {
+    const { logged_at, position_lat, position_lng, course, speed,
+            wind_speed, wind_direction, depth, barometer,
+            engine_hours, fuel_remaining, notes, voyage_id } = e;
+    if (!logged_at) continue;
+    const r = await pool.query(
+      `INSERT INTO ship_log_entries
+         (user_id, logged_at, position_lat, position_lng, course, speed,
+          wind_speed, wind_direction, depth, barometer,
+          engine_hours, fuel_remaining, notes, voyage_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       RETURNING *`,
+      [req.userId, logged_at, position_lat||null, position_lng||null,
+       course||null, speed||null, wind_speed||null, wind_direction||null,
+       depth||null, barometer||null, engine_hours||null, fuel_remaining||null,
+       notes||null, voyage_id||null, now]
+    );
+    inserted.push(r.rows[0]);
+  }
+  res.status(201).json(Array.isArray(req.body) ? inserted : inserted[0]);
+});
+
+// ── Logbook Subscription ──────────────────────────────────────────────────
+
+app.get('/logbook/status', authMiddleware, async (req, res) => {
+  const userRes = await pool.query(
+    'SELECT logbook_pro FROM users WHERE id=$1', [req.userId]
+  );
+  const storageRes = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) * 512 FROM captain_log_entries WHERE user_id=$1 AND deleted=false)
+       + (SELECT COUNT(*) * 256 FROM ship_log_entries WHERE user_id=$1 AND deleted=false)
+       AS storage_bytes`,
+    [req.userId]
+  );
+  res.json({
+    logbook_pro: userRes.rows[0]?.logbook_pro ?? false,
+    storage_bytes: parseInt(storageRes.rows[0]?.storage_bytes ?? 0),
+  });
+});
+
+app.post('/logbook/subscribe', authMiddleware, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
+  try {
+    const userRes = await pool.query(
+      'SELECT email, stripe_customer_id FROM users WHERE id=$1', [req.userId]
+    );
+    const user = userRes.rows[0];
+    const email = user?.email;
+
+    let customerId = user?.stripe_customer_id;
+    if (!customerId) {
+      const stripeCustomer = await stripe.customers.create({ email: email || undefined });
+      customerId = stripeCustomer.id;
+      await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [customerId, req.userId]);
+    }
+
+    const priceId = process.env.STRIPE_LOGBOOK_PRICE_ID || 'price_logbook_pro';
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${req.headers.origin || 'https://floatilla.app'}/logbook/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.origin || 'https://floatilla.app'}/logbook`,
+    });
+    res.json({ url: session.url });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });

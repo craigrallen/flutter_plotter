@@ -33,6 +33,9 @@ import '../floatilla/passage_plan_screen.dart';
 import '../floatilla/passage_briefing_screen.dart';
 import '../floatilla/engine_dashboard_screen.dart';
 import '../floatilla/anchor_scope_screen.dart';
+import '../floatilla/anchorage_screen.dart';
+import '../floatilla/departure_planner_screen.dart';
+import '../floatilla/tidal_gate_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -109,6 +112,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     PassageBriefingScreen(),
     EngineDashboardScreen(),
     AnchorScopeScreen(),
+    AnchorageScreen(),
+    DeparturePlannerScreen(),
+    TidalGateScreen(),
     SettingsScreen(),
   ];
 
@@ -345,6 +351,12 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.anchor), label: 'Anchor'),
       const NavigationDestination(
+          icon: Icon(Icons.place), label: 'Anchorages'),
+      const NavigationDestination(
+          icon: Icon(Icons.calendar_today), label: 'Depart'),
+      const NavigationDestination(
+          icon: Icon(Icons.water), label: 'Tidal Gates'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -408,6 +420,12 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.engineering), label: Text('Engine')),
       const NavigationRailDestination(
           icon: Icon(Icons.anchor), label: Text('Anchor')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.place), label: Text('Anchorages')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.calendar_today), label: Text('Depart')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.water), label: Text('Tidal Gates')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
