@@ -18,6 +18,7 @@ import '../weather/weather_screen.dart';
 import '../floatilla/logbook_screen.dart';
 import '../floatilla/floatilla_shell.dart';
 import '../floatilla/mob_overlay.dart';
+import '../floatilla/polar_performance_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -79,6 +80,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     TargetListScreen(),
     SignalKDashboard(),
     WeatherScreen(),
+    PolarPerformanceScreen(),
     SettingsScreen(),
   ];
 
@@ -285,6 +287,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       const NavigationDestination(icon: Icon(Icons.cloud), label: 'Weather'),
       const NavigationDestination(
+          icon: Icon(Icons.show_chart), label: 'Polar'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -318,6 +322,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       const NavigationRailDestination(
           icon: Icon(Icons.cloud), label: Text('Weather')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.show_chart), label: Text('Polar')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
