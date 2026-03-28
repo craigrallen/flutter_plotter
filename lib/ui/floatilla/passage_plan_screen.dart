@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../data/providers/vessel_provider.dart';
-import '../../data/providers/settings_provider.dart';
 
 /// Passage planning screen — combine waypoints + fuel + tides + weather
 /// into a go/no-go passage summary.
@@ -48,13 +47,10 @@ class _PassagePlanScreenState extends ConsumerState<PassagePlanScreen> {
       minutes: ((hours - hours.floor()) * 60).round(),
     ));
 
-    final settings = ref.read(appSettingsProvider);
     final vessel = ref.read(vesselProvider);
 
     // Rough fuel estimate: assume 5L/hr at hull speed, scale by speed²
-    final hullSpeed = settings.vesselMaxSpeedKn > 0
-        ? settings.vesselMaxSpeedKn
-        : 6.0;
+    const hullSpeed = 6.0; // default hull speed knots
     final fuelRate = 5.0 * (speed / hullSpeed) * (speed / hullSpeed);
     final fuelNeeded = fuelRate * hours;
     final fuelRemaining = fuel ?? 0;

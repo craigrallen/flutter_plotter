@@ -23,6 +23,8 @@ import '../floatilla/tidal_currents_screen.dart';
 import '../floatilla/ais_history_trail_screen.dart';
 import '../floatilla/deviation_table_screen.dart';
 import '../floatilla/race_start_timer_screen.dart';
+import '../floatilla/dead_reckoning_screen.dart';
+import '../floatilla/celestial_nav_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -89,6 +91,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     AisHistoryTrailScreen(),
     DeviationTableScreen(),
     RaceStartTimerScreen(),
+    DeadReckoningScreen(),
+    CelestialNavScreen(),
     SettingsScreen(),
   ];
 
@@ -305,6 +309,10 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.flag), label: 'Race'),
       const NavigationDestination(
+          icon: Icon(Icons.directions_boat), label: 'DR'),
+      const NavigationDestination(
+          icon: Icon(Icons.star), label: 'Celestial'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -348,6 +356,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.explore), label: Text('Deviation')),
       const NavigationRailDestination(
           icon: Icon(Icons.flag), label: Text('Race')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.directions_boat), label: Text('DR')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.star), label: Text('Celestial')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];

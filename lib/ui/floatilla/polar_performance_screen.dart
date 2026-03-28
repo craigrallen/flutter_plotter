@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/providers/signalk_provider.dart';
 import '../../data/models/signalk_state.dart';
+import '../../core/signalk/signalk_source.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Polar data model
