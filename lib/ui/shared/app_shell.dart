@@ -21,6 +21,7 @@ import '../floatilla/mob_overlay.dart';
 import '../floatilla/polar_performance_screen.dart';
 import '../floatilla/tidal_currents_screen.dart';
 import '../floatilla/ais_history_trail_screen.dart';
+import '../floatilla/deviation_table_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -85,6 +86,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     PolarPerformanceScreen(),
     TidalCurrentsScreen(),
     AisHistoryTrailScreen(),
+    DeviationTableScreen(),
     SettingsScreen(),
   ];
 
@@ -297,6 +299,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.history), label: 'AIS Trail'),
       const NavigationDestination(
+          icon: Icon(Icons.explore), label: 'Deviation'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -336,6 +340,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.waves), label: Text('Currents')),
       const NavigationRailDestination(
           icon: Icon(Icons.history), label: Text('AIS Trail')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.explore), label: Text('Deviation')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
