@@ -25,6 +25,7 @@ import '../floatilla/deviation_table_screen.dart';
 import '../floatilla/race_start_timer_screen.dart';
 import '../floatilla/dead_reckoning_screen.dart';
 import '../floatilla/celestial_nav_screen.dart';
+import '../floatilla/sar_pattern_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -93,6 +94,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     RaceStartTimerScreen(),
     DeadReckoningScreen(),
     CelestialNavScreen(),
+    SarPatternScreen(),
     SettingsScreen(),
   ];
 
@@ -313,6 +315,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.star), label: 'Celestial'),
       const NavigationDestination(
+          icon: Icon(Icons.search), label: 'SAR'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -360,6 +364,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.directions_boat), label: Text('DR')),
       const NavigationRailDestination(
           icon: Icon(Icons.star), label: Text('Celestial')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.search), label: Text('SAR')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
