@@ -373,9 +373,62 @@ class _SarPatternScreenState extends ConsumerState<SarPatternScreen>
 
   Widget _buildPlanTab(
       SarPlan plan, List<SarLeg> legs, double totalDist, int totalTimeMin) {
-    return SingleChildScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 700;
+        final formContent = _buildPlanForm(context, plan, legs, totalDist, totalTimeMin);
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: formContent,
+                ),
+              ),
+              Expanded(
+                child: _buildPatternPreview(legs, plan),
+              ),
+            ],
+          );
+        }
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: formContent,
+        );
+      },
+    );
+  }
+
+  Widget _buildPatternPreview(List<SarLeg> legs, SarPlan plan) {
+    return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('Pattern Preview'),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.shade900,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blueGrey.shade700),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _SarPatternPainter(legs: legs, datum: plan.datum),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanForm(BuildContext context, SarPlan plan, List<SarLeg> legs,
+      double totalDist, int totalTimeMin) {
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Pattern type selector ──────────────────────────────
@@ -504,7 +557,7 @@ class _SarPatternScreenState extends ConsumerState<SarPatternScreen>
           ],
 
           const SizedBox(height: 16),
-          // ── Pattern visualiser ─────────────────────────────────
+          // ── Pattern visualiser (narrow only) ──────────────────
           _sectionHeader('Pattern Preview'),
           Container(
             height: 320,
@@ -520,7 +573,6 @@ class _SarPatternScreenState extends ConsumerState<SarPatternScreen>
           ),
           const SizedBox(height: 80),
         ],
-      ),
     );
   }
 

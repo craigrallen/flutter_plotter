@@ -330,13 +330,13 @@ class _NmeaMuxScreenState extends ConsumerState<NmeaMuxScreen> {
           const SizedBox(width: 6),
           // Valid/invalid toggles
           _FilterChip(
-              label: '✓',
+              label: 'OK',
               active: _showValid,
               color: Colors.green,
               onTap: () => setState(() => _showValid = !_showValid)),
           const SizedBox(width: 4),
           _FilterChip(
-              label: '✗',
+              label: 'ERR',
               active: _showInvalid,
               color: Colors.red,
               onTap: () => setState(() => _showInvalid = !_showInvalid)),

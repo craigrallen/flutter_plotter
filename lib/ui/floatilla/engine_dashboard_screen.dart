@@ -110,9 +110,14 @@ class _EngineDashboardScreenState extends ConsumerState<EngineDashboardScreen> {
                 ],
               ),
             )
-          : SingleChildScrollView(
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 700;
+                return SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Column(
+              child: isWide
+                  ? _buildWideLayout(propulsion, electrical, environment)
+                  : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_cloudLogging)
@@ -202,7 +207,83 @@ class _EngineDashboardScreenState extends ConsumerState<EngineDashboardScreen> {
                   ],
                 ],
               ),
+            );
+              },
             ),
+    );
+  }
+
+  Widget _buildWideLayout(dynamic propulsion, dynamic electrical, dynamic environment) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Engines column
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (propulsion.engines.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'No engine data from Signal K\nCheck Signal K paths: propulsion.*',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                )
+              else
+                ...propulsion.engines.entries.map((e) =>
+                    _EngineCard(id: e.key, data: e.value)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        // Batteries + environment column
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (electrical.batteries.isNotEmpty) ...[
+                const Text('Batteries',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 8),
+                ...electrical.batteries.entries
+                    .map((e) => _BatteryCard(id: e.key, data: e.value)),
+                const SizedBox(height: 16),
+              ],
+              if (environment.waterTemp != null || environment.depthBelowKeel != null) ...[
+                const Text('Environment',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Wrap(
+                      spacing: 20,
+                      runSpacing: 12,
+                      children: [
+                        if (environment.depthBelowKeel != null)
+                          _Gauge(
+                            label: 'Depth (keel)',
+                            value: '${environment.depthBelowKeel!.toStringAsFixed(1)} m',
+                          ),
+                        if (environment.waterTemp != null)
+                          _Gauge(
+                            label: 'Water temp',
+                            value: '${(environment.waterTemp! - 273.15).toStringAsFixed(1)} °C',
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

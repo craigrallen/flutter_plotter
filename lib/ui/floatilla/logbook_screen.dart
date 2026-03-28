@@ -320,11 +320,11 @@ class _Stat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(value,
-            style: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 15)),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700)),
         Text(label,
-            style:
-                const TextStyle(fontSize: 11, color: Colors.grey)),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.grey)),
       ],
     );
   }

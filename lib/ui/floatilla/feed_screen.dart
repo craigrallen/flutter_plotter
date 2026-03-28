@@ -66,7 +66,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       final cog = vessel.cog;
       final sogStr = sog != null ? ' · ${sog.toStringAsFixed(1)} kn' : '';
       final cogStr = cog != null ? ' · ${cog.toStringAsFixed(0)}°' : '';
-      final text = '📍 Sharing my position$sogStr$cogStr';
+      final text = '[pos] Sharing my position$sogStr$cogStr';
       await service.sendMessage(text, position: pos);
       // Also update server location
       await service.updateLocation(pos, sog ?? 0, cog ?? 0);
@@ -204,13 +204,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             if (_sharePosition && vessel.position != null)
               Padding(
                 padding: const EdgeInsets.only(left: 48, top: 2),
-                child: Text(
-                  '📍 ${vessel.position!.latitude.toStringAsFixed(4)}, '
-                  '${vessel.position!.longitude.toStringAsFixed(4)}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on, size: 12, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 2),
+                    Text(
+                      '${vessel.position!.latitude.toStringAsFixed(4)}, '
+                      '${vessel.position!.longitude.toStringAsFixed(4)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],

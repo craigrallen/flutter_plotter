@@ -640,7 +640,7 @@ class _PerfCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = pct >= 100
-        ? 'On or above polar! 🎉'
+        ? 'On or above polar!'
         : pct >= 95
             ? 'Near polar target'
             : pct >= 80

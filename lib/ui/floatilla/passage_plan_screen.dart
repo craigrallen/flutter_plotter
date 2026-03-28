@@ -76,155 +76,168 @@ class _PassagePlanScreenState extends ConsumerState<PassagePlanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Passage Plan')),
-      body: SingleChildScrollView(
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 600;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: isWide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: _buildForm(context)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildResult(context)),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildForm(context),
+                      _buildResult(context),
+                    ],
+                  ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildResult(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_calculated && _summary != null) ...[
+          const SizedBox(height: 16),
+          _PassageSummaryCard(summary: _summary!),
+        ],
+        const SizedBox(height: 16),
+        Card(
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withOpacity(0.5),
+          child: const Padding(
+            padding: EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16),
+                    SizedBox(width: 6),
+                    Text('Coming soon',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Live weather forecast, tidal current overlays, '
+                  'and fuel consumption curves are planned for '
+                  'Floatilla Pro.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
+    return Card(
+      child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Input card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('Plan your passage',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 15)),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _destCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Destination',
-                        prefixIcon: Icon(Icons.flag),
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _distCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Distance (nm)',
-                              prefixIcon: Icon(Icons.straighten),
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _speedCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Speed (kn)',
-                              prefixIcon: Icon(Icons.speed),
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _fuelCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Fuel onboard (L)',
-                        prefixIcon: Icon(Icons.local_gas_station),
-                        border: OutlineInputBorder(),
-                        helperText: 'Optional',
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 12),
-                    // Departure time
-                    InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _departureTime,
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime.now()
-                              .add(const Duration(days: 365)),
-                        );
-                        if (date == null || !mounted) return;
-                        final time = await showTimePicker(
-                          context: context,
-                          initialTime: TimeOfDay.fromDateTime(_departureTime),
-                        );
-                        if (time == null) return;
-                        setState(() {
-                          _departureTime = DateTime(
-                            date.year,
-                            date.month,
-                            date.day,
-                            time.hour,
-                            time.minute,
-                          );
-                        });
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Departure',
-                          prefixIcon: Icon(Icons.schedule),
-                          border: OutlineInputBorder(),
-                        ),
-                        child: Text(
-                          DateFormat('EEE dd MMM HH:mm')
-                              .format(_departureTime),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.calculate),
-                      label: const Text('Calculate passage'),
-                      onPressed: _calculate,
-                    ),
-                  ],
-                ),
+            Text('Plan your passage',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _destCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Destination',
+                prefixIcon: Icon(Icons.flag),
+                border: OutlineInputBorder(),
               ),
             ),
-
-            // Summary card
-            if (_calculated && _summary != null) ...[
-              const SizedBox(height: 16),
-              _PassageSummaryCard(summary: _summary!),
-            ],
-
-            const SizedBox(height: 16),
-            // Info card
-            Card(
-              color: Theme.of(context)
-                  .colorScheme
-                  .surfaceContainerHighest
-                  .withOpacity(0.5),
-              child: const Padding(
-                padding: EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 16),
-                        SizedBox(width: 6),
-                        Text('Coming soon',
-                            style: TextStyle(fontWeight: FontWeight.w700)),
-                      ],
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _distCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Distance (nm)',
+                      prefixIcon: Icon(Icons.straighten),
+                      border: OutlineInputBorder(),
                     ),
-                    SizedBox(height: 6),
-                    Text(
-                      'Live weather forecast, tidal current overlays, '
-                      'and fuel consumption curves are planned for '
-                      'Floatilla Pro.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
+                    keyboardType: TextInputType.number,
+                  ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _speedCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Speed (kn)',
+                      prefixIcon: Icon(Icons.speed),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _fuelCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Fuel onboard (L)',
+                prefixIcon: Icon(Icons.local_gas_station),
+                border: OutlineInputBorder(),
+                helperText: 'Optional',
               ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _departureTime,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (date == null || !mounted) return;
+                final time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.fromDateTime(_departureTime),
+                );
+                if (time == null) return;
+                setState(() {
+                  _departureTime = DateTime(
+                    date.year, date.month, date.day,
+                    time.hour, time.minute,
+                  );
+                });
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Departure',
+                  prefixIcon: Icon(Icons.schedule),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(DateFormat('EEE dd MMM HH:mm').format(_departureTime)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              icon: const Icon(Icons.calculate),
+              label: const Text('Calculate passage'),
+              onPressed: _calculate,
             ),
           ],
         ),
