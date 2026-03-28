@@ -26,6 +26,10 @@ import '../floatilla/race_start_timer_screen.dart';
 import '../floatilla/dead_reckoning_screen.dart';
 import '../floatilla/celestial_nav_screen.dart';
 import '../floatilla/sar_pattern_screen.dart';
+import '../floatilla/radar_simulator_screen.dart';
+import '../floatilla/nmea_mux_screen.dart';
+import '../floatilla/passage_plan_screen.dart';
+import '../floatilla/engine_dashboard_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -95,6 +99,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     DeadReckoningScreen(),
     CelestialNavScreen(),
     SarPatternScreen(),
+    RadarSimulatorScreen(),
+    NmeaMuxScreen(),
+    PassagePlanScreen(),
+    EngineDashboardScreen(),
     SettingsScreen(),
   ];
 
@@ -317,6 +325,14 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.search), label: 'SAR'),
       const NavigationDestination(
+          icon: Icon(Icons.radar), label: 'Radar'),
+      const NavigationDestination(
+          icon: Icon(Icons.cable), label: 'NMEA'),
+      const NavigationDestination(
+          icon: Icon(Icons.explore), label: 'Passage'),
+      const NavigationDestination(
+          icon: Icon(Icons.engineering), label: 'Engine'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -366,6 +382,14 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.star), label: Text('Celestial')),
       const NavigationRailDestination(
           icon: Icon(Icons.search), label: Text('SAR')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.radar), label: Text('Radar')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.cable), label: Text('NMEA')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.explore), label: Text('Passage')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.engineering), label: Text('Engine')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
