@@ -29,7 +29,9 @@ import '../floatilla/sar_pattern_screen.dart';
 import '../floatilla/radar_simulator_screen.dart';
 import '../floatilla/nmea_mux_screen.dart';
 import '../floatilla/passage_plan_screen.dart';
+import '../floatilla/passage_briefing_screen.dart';
 import '../floatilla/engine_dashboard_screen.dart';
+import '../floatilla/anchor_scope_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -102,7 +104,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     RadarSimulatorScreen(),
     NmeaMuxScreen(),
     PassagePlanScreen(),
+    PassageBriefingScreen(),
     EngineDashboardScreen(),
+    AnchorScopeScreen(),
     SettingsScreen(),
   ];
 
@@ -331,7 +335,11 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.explore), label: 'Passage'),
       const NavigationDestination(
+          icon: Icon(Icons.auto_awesome), label: 'Briefing'),
+      const NavigationDestination(
           icon: Icon(Icons.engineering), label: 'Engine'),
+      const NavigationDestination(
+          icon: Icon(Icons.anchor), label: 'Anchor'),
       const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
@@ -389,7 +397,11 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationRailDestination(
           icon: Icon(Icons.explore), label: Text('Passage')),
       const NavigationRailDestination(
+          icon: Icon(Icons.auto_awesome), label: Text('Briefing')),
+      const NavigationRailDestination(
           icon: Icon(Icons.engineering), label: Text('Engine')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.anchor), label: Text('Anchor')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];

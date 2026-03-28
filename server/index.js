@@ -445,6 +445,18 @@ wss.on('connection', (ws, req) => {
   }, 30000);
 });
 
+// ── Anchor alert ─────────────────────────────────────────────────────────────
+
+// POST /anchor/alert — called when anchor drags, notify user's other devices via WS
+app.post('/anchor/alert', authMiddleware, async (req, res) => {
+  const { lat, lng, distanceM, swingRadiusM } = req.body;
+  const conn = wsClients.get(req.userId);
+  if (conn?.readyState === 1) conn.send(JSON.stringify({
+    type: 'anchor_drag', data: { lat, lng, distanceM, swingRadiusM }
+  }));
+  res.json({ ok: true });
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 initDb().then(() => {
@@ -912,4 +924,86 @@ app.put('/admin/users/:id/pro', adminMiddleware, async (req, res) => {
   const { is_pro } = req.body;
   await pool.query('UPDATE users SET is_pro=$1 WHERE id=$2', [is_pro, req.params.id]);
   res.json({ ok: true });
+});
+
+// ── AI Passage Briefing ───────────────────────────────────────────────────
+
+function haversineNm(lat1, lng1, lat2, lng2) {
+  const R = 3440.065;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+app.post('/passage/briefing', authMiddleware, async (req, res) => {
+  const { from, to, departureTime, vesselSpeedKn } = req.body;
+
+  const distNm = haversineNm(
+    from.lat || 0, from.lng || 0,
+    to.lat || 0, to.lng || 0,
+  );
+  const etaHours = distNm / (vesselSpeedKn || 6);
+
+  const prompt = `You are a marine navigation assistant. Provide a concise passage briefing for a vessel making the following passage:
+
+From: ${from.name || (from.lat + ',' + from.lng)}
+To: ${to.name || (to.lat + ',' + to.lng)}
+Departure: ${departureTime}
+Distance: ~${Math.round(distNm)}nm
+ETA: ~${Math.round(etaHours)}h at ${vesselSpeedKn || 6}kn
+
+Provide a structured briefing covering:
+1. Weather considerations for this region and season
+2. Tidal constraints (key gates, optimal passage timing)
+3. Known hazards on this route
+4. Anchorage options if conditions deteriorate
+5. Key waypoints to note
+6. Safety summary
+
+Be specific, practical, and concise. Use nautical terminology. Flag any safety-critical items prominently.`;
+
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
+    return res.json({
+      briefing: `Passage briefing for ${from.name || 'departure'} to ${to.name || 'destination'}:\n\nDistance: ~${Math.round(distNm)}nm\nETA at ${vesselSpeedKn || 6}kn: ~${Math.round(etaHours)}h\n\nAI briefing unavailable (no API key configured). Please check weather via your preferred service and consult pilot charts for this region.\n\nSafety reminder: File a passage plan with your local coastguard or marina. Check weather forecasts from multiple sources. Ensure all safety equipment is aboard and serviceable.`,
+    });
+  }
+
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk');
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      const stream = await client.messages.stream({
+        model: 'claude-3-5-haiku-latest',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+          res.write(`data: ${JSON.stringify({ text: chunk.delta.text })}\n\n`);
+        }
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    } catch (err) {
+      console.error('[passage/briefing] Anthropic error:', err.message);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'AI service error', detail: err.message });
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+  }
+
+  // Fallback: OpenAI (not yet implemented)
+  res.json({ briefing: 'OpenAI fallback not implemented yet.' });
 });

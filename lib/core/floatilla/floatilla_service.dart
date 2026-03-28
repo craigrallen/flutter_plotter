@@ -356,6 +356,30 @@ class FloatillaService {
     _reconnectTimer = Timer(delay, _connectWebSocket);
   }
 
+  /// POST /anchor/alert — notify other devices of an anchor drag event.
+  Future<void> postAnchorAlert({
+    required double lat,
+    required double lng,
+    required double distanceM,
+    required double swingRadiusM,
+  }) async {
+    if (_token == null) return;
+    final uri = Uri.parse('$baseUrl/anchor/alert');
+    await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({
+        'lat': lat,
+        'lng': lng,
+        'distanceM': distanceM,
+        'swingRadiusM': swingRadiusM,
+      }),
+    );
+  }
+
   void dispose() {
     _intentionalClose = true;
     _reconnectTimer?.cancel();
