@@ -877,3 +877,39 @@ app.get('/proxy/weather', async (req, res) => {
   // TODO: proxy to Open-Meteo or ECMWF
   res.json({ forecast: [], message: 'Weather proxy not yet implemented' });
 });
+
+// ── Admin: Revenue & Feature Flags ─────────────────────────────────────────
+
+app.get('/admin/revenue', adminMiddleware, async (req, res) => {
+  const totalUsers = await pool.query('SELECT COUNT(*) FROM users');
+  const proUsers = await pool.query('SELECT COUNT(*) FROM users WHERE is_pro=true');
+  const freeUsers = totalUsers.rows[0].count - proUsers.rows[0].count;
+  
+  const subscribers = await pool.query(
+    'SELECT id, username, email, stripe_customer_id, is_pro, created_at FROM users WHERE is_pro=true ORDER BY created_at DESC'
+  );
+
+  // Simple MRR calc: assume $9.99/month per pro user
+  const mrr = proUsers.rows[0].count * 9.99;
+
+  res.json({
+    mrr: mrr.toFixed(2),
+    proCount: proUsers.rows[0].count,
+    freeCount: freeUsers,
+    churnRate: 0, // TODO: calculate from subscription history
+    subscribers: subscribers.rows,
+  });
+});
+
+app.get('/admin/features', adminMiddleware, async (req, res) => {
+  const users = await pool.query(
+    'SELECT id, username, is_pro, feature_flags FROM users ORDER BY created_at DESC'
+  );
+  res.json(users.rows);
+});
+
+app.put('/admin/users/:id/pro', adminMiddleware, async (req, res) => {
+  const { is_pro } = req.body;
+  await pool.query('UPDATE users SET is_pro=$1 WHERE id=$2', [is_pro, req.params.id]);
+  res.json({ ok: true });
+});
