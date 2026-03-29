@@ -13,7 +13,6 @@ class FriendsScreen extends ConsumerStatefulWidget {
 
 class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   List<FloatillaFriendRequest> _requests = [];
-  bool _loadingRequests = false;
 
   @override
   void initState() {
@@ -23,12 +22,10 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
 
   Future<void> _loadRequests() async {
     if (!FloatillaService.instance.isLoggedIn()) return;
-    setState(() => _loadingRequests = true);
     try {
       final reqs = await FloatillaService.instance.getFriendRequests();
       if (mounted) setState(() => _requests = reqs);
     } catch (_) {}
-    if (mounted) setState(() => _loadingRequests = false);
   }
 
   @override

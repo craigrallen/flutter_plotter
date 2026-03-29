@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/signalk_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ class DeviationEntriesNotifier extends StateNotifier<List<DeviationEntry>> {
           .map(DeviationEntry.fromJson)
           .toList();
       state = list;
-    } catch (_) {}
+    } catch (e) { logError('DeviationTableNotifier.load', e); }
   }
 
   Future<void> add(DeviationEntry entry) async {

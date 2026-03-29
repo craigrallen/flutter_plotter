@@ -486,7 +486,7 @@ class _MarinaLayerScreenState extends ConsumerState<MarinaLayerScreen> {
 
 class _MarinaBottomSheet extends ConsumerStatefulWidget {
   final _Marina marina;
-  const _MarinaBottomSheet({super.key, required this.marina});
+  const _MarinaBottomSheet({required this.marina});
 
   @override
   ConsumerState<_MarinaBottomSheet> createState() => _MarinaBottomSheetState();

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/floatilla/floatilla_service.dart';
+import '../../core/utils/error_handler.dart';
 
 // ── Models ─────────────────────────────────────────────────────────────────
 
@@ -299,7 +300,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         shipsLog: ships,
         lastSyncedAt: lastSync,
       );
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier._loadFromCache', e); }
   }
 
   Future<void> _saveToCache() async {
@@ -316,7 +317,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
       if (state.lastSyncedAt != null) {
         await prefs.setInt(_prefsLastSyncKey, state.lastSyncedAt!);
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier._saveToCache', e); }
   }
 
   Future<void> checkStatus() async {
@@ -335,7 +336,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
           _startPeriodicSync();
         }
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier.checkStatus', e); }
   }
 
   void _startPeriodicSync() {
@@ -398,7 +399,8 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
       } else {
         state = state.copyWith(status: SyncStatus.error);
       }
-    } catch (_) {
+    } catch (e) {
+      logError('CloudLogbookNotifier.syncCaptainsLog', e);
       state = state.copyWith(status: SyncStatus.error, message: 'Offline');
     }
   }
@@ -434,7 +436,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         await _saveToCache();
         await _refreshVoyages();
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier.syncShipsLog', e); }
   }
 
   Future<void> _refreshVoyages() async {
@@ -451,7 +453,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
             .toList();
         state = state.copyWith(voyages: voyages);
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier._refreshVoyages', e); }
   }
 
   // ── Captain's Log CRUD ─────────────────────────────────────────────────
@@ -486,7 +488,8 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         await _saveToCache();
         return true;
       }
-    } catch (_) {
+    } catch (e) {
+      logError('CloudLogbookNotifier.addCaptainEntry', e);
       _queueOffline('captain', 'create', entry.toJson());
     }
     return false;
@@ -508,7 +511,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         await _saveToCache();
         return true;
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier.updateCaptainEntry', e); }
     return false;
   }
 
@@ -524,7 +527,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         Uri.parse('$_baseUrl/captains-log/$id'),
         headers: _headers,
       );
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier.deleteCaptainEntry', e); }
     return true;
   }
 
@@ -551,7 +554,8 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         await _saveToCache();
         return true;
       }
-    } catch (_) {
+    } catch (e) {
+      logError('CloudLogbookNotifier.addShipEntry', e);
       _queueOffline('ship', 'create', entry.toJson());
     }
     return false;
@@ -567,7 +571,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
         final body = jsonDecode(resp.body) as Map<String, dynamic>;
         return body['url'] as String? ?? '';
       }
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier.getSubscribeUrl', e); }
     return '';
   }
 
@@ -582,7 +586,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsOfflineQueueKey, jsonEncode(_offlineQueue));
-    } catch (_) {}
+    } catch (e) { logError('CloudLogbookNotifier._saveOfflineQueue', e); }
   }
 
   Future<void> _flushOfflineQueue() async {
@@ -600,7 +604,7 @@ class CloudLogbookNotifier extends StateNotifier<LogbookSyncState> {
           final entry = ShipLogEntry.fromJson(item['data'] as Map<String, dynamic>);
           await addShipEntry(entry);
         }
-      } catch (_) {}
+      } catch (e) { logError('CloudLogbookNotifier._flushOfflineQueue', e); }
     }
   }
 

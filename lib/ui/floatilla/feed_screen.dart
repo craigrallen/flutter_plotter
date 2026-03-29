@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
@@ -371,8 +372,6 @@ class _MessageTile extends StatelessWidget {
                   GestureDetector(
                     onTap: () {
                       final pos = message.position!;
-                      final url =
-                          'https://www.google.com/maps?q=${pos.latitude},${pos.longitude}';
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text(
@@ -382,7 +381,9 @@ class _MessageTile extends StatelessWidget {
                           action: SnackBarAction(
                             label: 'Copy',
                             onPressed: () {
-                              // copy to clipboard
+                              Clipboard.setData(ClipboardData(
+                                text: 'https://www.google.com/maps?q=${pos.latitude},${pos.longitude}',
+                              ));
                             },
                           ),
                         ),

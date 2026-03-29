@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../../core/floatilla/floatilla_service.dart';
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/signalk_provider.dart';
 import '../../core/signalk/signalk_models.dart';
 import '../../core/signalk/signalk_source.dart';
@@ -62,7 +63,7 @@ class _EngineDashboardScreenState extends ConsumerState<EngineDashboardScreen> {
         }),
       );
       if (mounted) setState(() => _logCount++);
-    } catch (_) {}
+    } catch (e) { logError('EngineDashboardScreen._logEntry', e); }
   }
 
   @override

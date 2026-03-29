@@ -75,7 +75,7 @@ class _HeelNotifier extends StateNotifier<double?> {
           state = (val as num).toDouble() * 180 / pi;
         }
       }
-    } catch (_) {}
+    } catch (e) { logError('TrimRollNotifier.update', e); }
   }
 
   @override

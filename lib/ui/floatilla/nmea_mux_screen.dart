@@ -33,7 +33,6 @@ class _NmeaMuxScreenState extends ConsumerState<NmeaMuxScreen> {
   final List<_NmeaMuxState> _sentences = [];
   final _maxSentences = 500;
   bool _paused = false;
-  bool _autoScroll = true;
   final _scrollController = ScrollController();
   final _filterCtrl = TextEditingController();
   String _filter = '';

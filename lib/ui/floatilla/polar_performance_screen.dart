@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/signalk_provider.dart';
 import '../../core/signalk/signalk_source.dart';
 
@@ -199,7 +200,7 @@ class PolarNotifier extends StateNotifier<PolarData?> {
       if (csv != null && csv.isNotEmpty) {
         state = parsePolarCsv(csv);
       }
-    } catch (_) {}
+    } catch (e) { logError('PolarDataNotifier.init', e); }
   }
 
   Future<void> load(String csv) async {
@@ -295,7 +296,8 @@ class _PolarPerformanceScreenState
   Future<String?> _readFile(String path) async {
     try {
       return await File(path).readAsString();
-    } catch (_) {
+    } catch (e) {
+      logError('PolarPerformanceScreen._readFile', e);
       return null;
     }
   }
