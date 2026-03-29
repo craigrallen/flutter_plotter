@@ -202,8 +202,145 @@ async function initDb() {
       confirmed_count INTEGER NOT NULL DEFAULT 0
     )
   `).catch(() => {});
+
+  // ── Marinas / community amenity layer ────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marinas (
+      id SERIAL PRIMARY KEY,
+      lat DOUBLE PRECISION NOT NULL,
+      lng DOUBLE PRECISION NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'marina',
+      fuel TEXT NOT NULL DEFAULT 'unknown',
+      fuel_price TEXT,
+      water TEXT NOT NULL DEFAULT 'unknown',
+      depth DOUBLE PRECISION,
+      vhf INTEGER,
+      facilities JSONB NOT NULL DEFAULT '{}',
+      created_by TEXT,
+      updated_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `).catch(() => {});
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marina_notes (
+      id SERIAL PRIMARY KEY,
+      marina_id INTEGER NOT NULL REFERENCES marinas(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      note TEXT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT
+    )
+  `).catch(() => {});
+
   console.log('Database schema ready');
 }
+
+// ── Marinas endpoints ─────────────────────────────────────────────────────────
+
+// GET /marinas/nearby?lat=&lng=&radiusNm=20
+app.get('/marinas/nearby', async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lng = parseFloat(req.query.lng);
+    const radiusNm = parseFloat(req.query.radiusNm) || 20;
+    if (isNaN(lat) || isNaN(lng)) return res.status(400).json({ error: 'lat/lng required' });
+
+    // Convert nm to degrees (rough: 1 nm ≈ 1/60 degree)
+    const degRadius = radiusNm / 60;
+
+    const result = await pool.query(
+      `SELECT id, lat, lng, name, type, fuel, fuel_price, water, depth, vhf,
+              facilities, created_by, updated_at
+       FROM marinas
+       WHERE lat BETWEEN $1 AND $2 AND lng BETWEEN $3 AND $4`,
+      [lat - degRadius, lat + degRadius, lng - degRadius, lng + degRadius]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /marinas — add or update a marina
+app.post('/marinas', async (req, res) => {
+  try {
+    const { id, lat, lng, name, type, fuel, fuel_price, water, depth, vhf, facilities } = req.body;
+    const username = req.headers.authorization
+      ? (() => { try { return jwt.verify(req.headers.authorization.slice(7), JWT_SECRET).username; } catch { return null; } })()
+      : null;
+
+    if (id) {
+      // Update existing
+      await pool.query(
+        `UPDATE marinas SET lat=$1, lng=$2, name=$3, type=$4, fuel=$5, fuel_price=$6,
+         water=$7, depth=$8, vhf=$9, facilities=$10, updated_at=$11
+         WHERE id=$12`,
+        [lat, lng, name, type || 'marina', fuel || 'unknown', fuel_price || null,
+         water || 'unknown', depth || null, vhf || null,
+         JSON.stringify(facilities || {}), Math.floor(Date.now() / 1000), id]
+      );
+      const updated = await pool.query('SELECT * FROM marinas WHERE id=$1', [id]);
+      return res.json(updated.rows[0]);
+    } else {
+      // Insert new
+      const result = await pool.query(
+        `INSERT INTO marinas (lat, lng, name, type, fuel, fuel_price, water, depth, vhf, facilities, created_by, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [lat, lng, name, type || 'marina', fuel || 'unknown', fuel_price || null,
+         water || 'unknown', depth || null, vhf || null,
+         JSON.stringify(facilities || {}), username, Math.floor(Date.now() / 1000)]
+      );
+      return res.status(201).json(result.rows[0]);
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /marinas/:id/notes — add a community note
+app.post('/marinas/:id/notes', async (req, res) => {
+  try {
+    const marinaId = parseInt(req.params.id);
+    const { note } = req.body;
+    if (!note) return res.status(400).json({ error: 'note required' });
+
+    let userId = null;
+    if (req.headers.authorization) {
+      try {
+        const payload = jwt.verify(req.headers.authorization.slice(7), JWT_SECRET);
+        userId = payload.userId;
+      } catch {}
+    }
+
+    const result = await pool.query(
+      `INSERT INTO marina_notes (marina_id, user_id, note, created_at)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [marinaId, userId, note, Math.floor(Date.now() / 1000)]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /marinas/:id/notes?limit=5
+app.get('/marinas/:id/notes', async (req, res) => {
+  try {
+    const marinaId = parseInt(req.params.id);
+    const limit = parseInt(req.query.limit) || 5;
+    const result = await pool.query(
+      `SELECT mn.id, mn.note, mn.created_at, u.username
+       FROM marina_notes mn
+       LEFT JOIN users u ON u.id = mn.user_id
+       WHERE mn.marina_id = $1
+       ORDER BY mn.created_at DESC
+       LIMIT $2`,
+      [marinaId, limit]
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ── Auth middleware ───────────────────────────────────────────────────────────
 

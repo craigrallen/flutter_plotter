@@ -1,14 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/floatilla/floatilla_service.dart';
-import '../../data/models/signalk_state.dart';
-import '../../core/signalk/signalk_models.dart';
 import '../../core/signalk/signalk_source.dart';
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/signalk_provider.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,7 +108,7 @@ class _TankConfigNotifier extends StateNotifier<Map<String, _TankConfig>> {
         map[cfg.key] = cfg;
       }
       state = map;
-    } catch (_) {}
+    } catch (e) { logError('TankConfigNotifier.load', e); }
   }
 
   Future<void> _save() async {
@@ -158,7 +154,7 @@ class TankMonitorScreen extends ConsumerWidget {
     final allKeys = <String>{...skTanks.keys, ...configs.keys};
 
     // Compute effective level for each tank
-    double? _effectiveLevel(String key) {
+    double? effectiveLevel(String key) {
       if (connected && skTanks.containsKey(key)) {
         return skTanks[key]!.currentLevel;
       }
@@ -168,7 +164,7 @@ class TankMonitorScreen extends ConsumerWidget {
     // Collect fuel tanks for aggregate stats
     final fuelKeys = allKeys.where(_isFuelTank).toList();
     final fuelLevels = fuelKeys
-        .map((k) => _effectiveLevel(k))
+        .map((k) => effectiveLevel(k))
         .whereType<double>()
         .toList();
     final fuelCapacities = fuelKeys.map((k) {
@@ -184,7 +180,7 @@ class TankMonitorScreen extends ConsumerWidget {
       double sumCap = 0;
       bool hasCap = false;
       for (int i = 0; i < fuelKeys.length; i++) {
-        final level = _effectiveLevel(fuelKeys[i]);
+        final level = effectiveLevel(fuelKeys[i]);
         if (level == null) continue;
         final cap = fuelCapacities[i];
         if (cap != null) {
@@ -223,7 +219,7 @@ class TankMonitorScreen extends ConsumerWidget {
     for (final key in allKeys) {
       final threshold = configs[key]?.alertThresholdPct;
       if (threshold == null) continue;
-      final level = _effectiveLevel(key);
+      final level = effectiveLevel(key);
       if (level != null && level * 100 < threshold) {
         alertKeys.add(key);
       }
@@ -341,7 +337,7 @@ class TankMonitorScreen extends ConsumerWidget {
                   final key = allKeys.elementAt(i);
                   final skTank = skTanks[key];
                   final cfg = configs[key];
-                  final level = _effectiveLevel(key);
+                  final level = effectiveLevel(key);
                   final isManual = !connected || !skTanks.containsKey(key);
                   final displayName = cfg?.customName ?? _tankLabel(key);
 

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/floatilla/floatilla_service.dart';
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/vessel_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -151,7 +152,8 @@ Map<String, bool> _parseFacilities(dynamic raw) {
   try {
     final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
     return decoded.map((k, v) => MapEntry(k, v == true));
-  } catch (_) {
+  } catch (e) {
+    logError('_parseFeatures', e);
     return {};
   }
 }
@@ -202,7 +204,7 @@ class _MarinasNotifier extends StateNotifier<List<_Marina>> {
             .map((e) => _Marina.fromJson(e as Map<String, dynamic>))
             .toList();
       }
-    } catch (_) {}
+    } catch (e) { logError('MarinasNotifier.loadNearby', e); }
   }
 
   Future<bool> submitMarina(_Marina marina) async {
@@ -222,7 +224,7 @@ class _MarinasNotifier extends StateNotifier<List<_Marina>> {
         state = [...state.where((m) => m.id != updated.id), updated];
         return true;
       }
-    } catch (_) {}
+    } catch (e) { logError('MarinasNotifier.submitMarina', e); }
     return false;
   }
 
@@ -238,14 +240,14 @@ class _MarinasNotifier extends StateNotifier<List<_Marina>> {
         body: jsonEncode({'note': note}),
       );
       return resp.statusCode == 200 || resp.statusCode == 201;
-    } catch (_) {
+    } catch (e) {
+      logError('MarinasNotifier.addNote', e);
       return false;
     }
   }
 }
 
 final _filterProvider = StateProvider<_Filter>((_) => _Filter.all);
-final _notesProvider = StateProvider<Map<int, List<_MarinaNote>>>((_) => {});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -289,7 +291,8 @@ class _MarinaLayerScreenState extends ConsumerState<MarinaLayerScreen> {
                 );
           }
         }
-      } catch (_) {
+      } catch (e) {
+        logError('MarinaLayerScreen._initLocation', e);
         ref.read(_marinasProvider.notifier).loadNearby(
               _center.latitude,
               _center.longitude,
@@ -413,7 +416,6 @@ class _MarinaLayerScreenState extends ConsumerState<MarinaLayerScreen> {
             urlTemplate:
                 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
             userAgentPackageName: 'com.craigrallen.flutter_plotter',
-            backgroundColor: Colors.transparent,
           ),
           MarkerLayer(
             markers: visible
@@ -517,7 +519,7 @@ class _MarinaBottomSheetState extends ConsumerState<_MarinaBottomSheet> {
               list.map((e) => _MarinaNote.fromJson(e as Map<String, dynamic>)).toList());
         }
       }
-    } catch (_) {}
+    } catch (e) { logError('_MarinaBottomSheetState._loadNotes', e); }
     if (mounted) setState(() => _loadingNotes = false);
   }
 
@@ -738,20 +740,16 @@ class _AvailChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color color;
-    IconData statusIcon;
+    final Color color;
     switch (avail) {
       case _Availability.yes:
         color = Colors.green;
-        statusIcon = Icons.check_circle;
         break;
       case _Availability.no:
         color = Colors.red;
-        statusIcon = Icons.cancel;
         break;
       case _Availability.unknown:
         color = Colors.grey;
-        statusIcon = Icons.help_outline;
         break;
     }
     return Chip(

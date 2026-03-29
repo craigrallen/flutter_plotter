@@ -5,9 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../../data/providers/signalk_provider.dart';
-import '../../core/signalk/signalk_models.dart';
 import '../../core/signalk/signalk_source.dart';
-import '../../data/models/signalk_state.dart';
+import '../../core/utils/error_handler.dart';
 import '../../data/providers/data_source_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -309,7 +308,7 @@ class _TrimAssistantScreenState extends ConsumerState<TrimAssistantScreen> {
 
 class _OverallScoreCard extends StatelessWidget {
   final _TrimScores scores;
-  const _OverallScoreCard({super.key, required this.scores});
+  const _OverallScoreCard({required this.scores});
 
   @override
   Widget build(BuildContext context) {
@@ -441,7 +440,7 @@ class _InstrumentChip extends StatelessWidget {
 
 class _ScoreBreakdownCard extends StatelessWidget {
   final _TrimScores scores;
-  const _ScoreBreakdownCard({super.key, required this.scores});
+  const _ScoreBreakdownCard({required this.scores});
 
   @override
   Widget build(BuildContext context) {
@@ -501,7 +500,7 @@ class _ScoreRow extends StatelessWidget {
 
 class _AdvicePanel extends StatelessWidget {
   final List<_Advice> advice;
-  const _AdvicePanel({super.key, required this.advice});
+  const _AdvicePanel({required this.advice});
 
   @override
   Widget build(BuildContext context) {
@@ -542,7 +541,7 @@ class _AdvicePanel extends StatelessWidget {
 
 class _TrimHistoryChart extends StatelessWidget {
   final List<_ScorePoint> history;
-  const _TrimHistoryChart({super.key, required this.history});
+  const _TrimHistoryChart({required this.history});
 
   @override
   Widget build(BuildContext context) {

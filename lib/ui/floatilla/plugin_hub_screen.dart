@@ -31,6 +31,10 @@ import '../floatilla/sar_pattern_screen.dart';
 import '../floatilla/tidal_currents_screen.dart';
 import '../floatilla/tidal_gate_screen.dart';
 import '../floatilla/track_comparison_screen.dart';
+import '../floatilla/marina_layer_screen.dart';
+import '../floatilla/tank_monitor_screen.dart';
+import '../floatilla/trim_assistant_screen.dart';
+import '../floatilla/voyage_health_screen.dart';
 import '../floatilla/voyage_logger_screen.dart';
 import '../routes/route_list_screen.dart';
 import '../signalk/signalk_dashboard.dart';
@@ -224,6 +228,16 @@ final List<_Category> _categories = [
         icon: Icons.radar,
         builder: (_) => const RadarSimulatorScreen(),
       ),
+      _PluginEntry(
+        name: 'Tanks',
+        icon: Icons.water_drop,
+        builder: (_) => const TankMonitorScreen(),
+      ),
+      _PluginEntry(
+        name: 'Trim',
+        icon: Icons.tune,
+        builder: (_) => const TrimAssistantScreen(),
+      ),
     ],
   ),
   _Category(
@@ -234,6 +248,11 @@ final List<_Category> _categories = [
         name: 'Voyage Logger',
         icon: Icons.edit_note,
         builder: (_) => const VoyageLoggerScreen(),
+      ),
+      _PluginEntry(
+        name: 'Voyage Score',
+        icon: Icons.analytics,
+        builder: (_) => const VoyageHealthScreen(),
       ),
       _PluginEntry(
         name: 'Cloud Logbook',
@@ -270,6 +289,11 @@ final List<_Category> _categories = [
         name: 'Passage\nBriefing (AI)',
         icon: Icons.auto_awesome,
         builder: (_) => const PassageBriefingScreen(),
+      ),
+      _PluginEntry(
+        name: 'Marinas',
+        icon: Icons.location_city,
+        builder: (_) => const MarinaLayerScreen(),
       ),
     ],
   ),

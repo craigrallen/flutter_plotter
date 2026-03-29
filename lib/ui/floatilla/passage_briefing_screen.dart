@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/floatilla/floatilla_service.dart';
+import '../../core/utils/error_handler.dart';
 
 class PassageBriefingScreen extends StatefulWidget {
   const PassageBriefingScreen({super.key});
@@ -107,7 +108,7 @@ class _PassageBriefingScreenState extends State<PassageBriefingScreen> {
                   if (mounted) {
                     setState(() => _briefingText = buffer.toString());
                   }
-                } catch (_) {}
+                } catch (e) { logError('PassageBriefingScreen.streamParse', e); }
               }
             }
           }
