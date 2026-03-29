@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../../core/floatilla/floatilla_service.dart';
 import '../../core/floatilla/logbook_service.dart';
-import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/vessel_provider.dart';
 
 class LogbookScreen extends ConsumerStatefulWidget {

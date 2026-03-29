@@ -19,6 +19,21 @@ class OsmBaseProvider implements ChartTileProvider {
       );
 }
 
+/// CartoDB Dark Matter — night mode base layer.
+class CartoDbDarkProvider implements ChartTileProvider {
+  @override
+  String get name => 'CartoDB Dark';
+
+  @override
+  TileLayer get tileLayer => TileLayer(
+        urlTemplate:
+            'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        subdomains: const ['a', 'b', 'c', 'd'],
+        userAgentPackageName: 'com.craigrallen.flutter_plotter',
+        maxZoom: 19,
+      );
+}
+
 /// OpenSeaMap nautical overlay.
 class OpenSeaMapProvider implements ChartTileProvider {
   @override

@@ -84,8 +84,6 @@ class SarPlan {
 //  Geometry helpers (NM ↔ degrees, bearing, destination)
 // ─────────────────────────────────────────────────────────────────
 
-const _nmPerDeg = 60.0;  // 1° latitude ≈ 60 NM
-
 LatLng _destination(LatLng origin, double bearingDeg, double distanceNm) {
   final R = 6371000.0; // Earth radius metres
   final d = distanceNm * 1852.0;
@@ -102,27 +100,7 @@ LatLng _destination(LatLng origin, double bearingDeg, double distanceNm) {
   return LatLng(lat2 * 180 / math.pi, lon2 * 180 / math.pi);
 }
 
-double _bearing(LatLng from, LatLng to) {
-  final lat1 = from.lat * math.pi / 180;
-  final lat2 = to.lat * math.pi / 180;
-  final dLon = (to.lng - from.lng) * math.pi / 180;
-  final y = math.sin(dLon) * math.cos(lat2);
-  final x = math.cos(lat1) * math.sin(lat2) -
-      math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
-  return (math.atan2(y, x) * 180 / math.pi + 360) % 360;
-}
 
-double _haversineNm(LatLng a, LatLng b) {
-  const R = 3440.065; // NM
-  final dLat = (b.lat - a.lat) * math.pi / 180;
-  final dLon = (b.lng - a.lng) * math.pi / 180;
-  final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(a.lat * math.pi / 180) *
-          math.cos(b.lat * math.pi / 180) *
-          math.sin(dLon / 2) *
-          math.sin(dLon / 2);
-  return 2 * R * math.asin(math.sqrt(h));
-}
 
 // ─────────────────────────────────────────────────────────────────
 //  Pattern calculators

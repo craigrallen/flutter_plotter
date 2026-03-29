@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers/signalk_provider.dart';
-import '../../data/models/signalk_state.dart';
 import '../../core/signalk/signalk_source.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────

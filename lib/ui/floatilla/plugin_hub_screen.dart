@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import '../chart/chart_screen.dart';
+import '../floatilla/cdi_screen.dart';
+import '../floatilla/fuel_range_screen.dart';
+import '../floatilla/waypoint_calc_screen.dart';
 import '../floatilla/ais_cpa_screen.dart';
 import '../floatilla/ais_history_trail_screen.dart';
 import '../floatilla/anchor_scope_screen.dart';
@@ -11,13 +15,18 @@ import '../floatilla/departure_planner_screen.dart';
 import '../floatilla/deviation_table_screen.dart';
 import '../floatilla/engine_dashboard_screen.dart';
 import '../floatilla/floatilla_shell.dart';
+import '../floatilla/daily_briefing_screen.dart';
 import '../floatilla/grib_weather_screen.dart';
+import '../floatilla/ocean_current_screen.dart';
+import '../floatilla/swell_breakdown_screen.dart';
+import '../floatilla/wind_history_screen.dart';
 import '../floatilla/nmea_mux_screen.dart';
 import '../floatilla/passage_briefing_screen.dart';
 import '../floatilla/passage_plan_screen.dart';
 import '../floatilla/polar_performance_screen.dart';
 import '../floatilla/race_start_timer_screen.dart';
 import '../floatilla/radar_simulator_screen.dart';
+import '../floatilla/mob_drift_screen.dart';
 import '../floatilla/sar_pattern_screen.dart';
 import '../floatilla/tidal_currents_screen.dart';
 import '../floatilla/tidal_gate_screen.dart';
@@ -92,6 +101,26 @@ final List<_Category> _categories = [
         icon: Icons.star_outline,
         builder: (_) => const CelestialNavScreen(),
       ),
+      _PluginEntry(
+        name: 'Waypoint\nCalc',
+        icon: Icons.calculate,
+        builder: (_) => const WaypointCalcScreen(),
+      ),
+      _PluginEntry(
+        name: 'CDI',
+        icon: Icons.linear_scale,
+        builder: (_) => const CdiScreen(),
+      ),
+      _PluginEntry(
+        name: 'Fuel Range',
+        icon: Icons.local_gas_station,
+        builder: (_) => const FuelRangeScreen(),
+      ),
+      _PluginEntry(
+        name: 'Night Mode',
+        icon: Icons.nightlight_round,
+        builder: (_) => const ChartScreen(initialNightMode: true),
+      ),
     ],
   ),
   _Category(
@@ -112,6 +141,11 @@ final List<_Category> _categories = [
         name: 'Boat Health\nMonitor',
         icon: Icons.monitor_heart,
         builder: (_) => const BoatHealthScreen(),
+      ),
+      _PluginEntry(
+        name: 'MOB',
+        icon: Icons.person_off,
+        builder: (_) => const MobDriftScreen(),
       ),
       _PluginEntry(
         name: 'SAR Patterns',
@@ -138,6 +172,26 @@ final List<_Category> _categories = [
         name: 'Weather Overlay',
         icon: Icons.cloud_outlined,
         builder: (_) => const WeatherScreen(),
+      ),
+      _PluginEntry(
+        name: 'Briefing',
+        icon: Icons.wb_cloudy,
+        builder: (_) => const DailyBriefingScreen(),
+      ),
+      _PluginEntry(
+        name: 'Wind',
+        icon: Icons.air,
+        builder: (_) => const WindHistoryScreen(),
+      ),
+      _PluginEntry(
+        name: 'Currents',
+        icon: Icons.water,
+        builder: (_) => const OceanCurrentScreen(),
+      ),
+      _PluginEntry(
+        name: 'Swell',
+        icon: Icons.waves,
+        builder: (_) => const SwellBreakdownScreen(),
       ),
     ],
   ),

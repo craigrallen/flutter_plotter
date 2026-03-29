@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../../core/floatilla/floatilla_service.dart';
 import '../../data/providers/signalk_provider.dart';
-import '../../data/models/signalk_state.dart';
 import '../../core/signalk/signalk_models.dart';
 import '../../core/signalk/signalk_source.dart';
 

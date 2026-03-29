@@ -36,7 +36,10 @@ import '../routing/auto_route_screen.dart';
 final courseUpProvider = StateProvider<bool>((ref) => false);
 
 class ChartScreen extends ConsumerStatefulWidget {
-  const ChartScreen({super.key});
+  const ChartScreen({super.key, this.initialNightMode = false});
+
+  /// When true, the chart starts in night mode (dark tiles + instrument bar).
+  final bool initialNightMode;
 
   @override
   ConsumerState<ChartScreen> createState() => _ChartScreenState();
@@ -49,6 +52,9 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   bool _cpaAlarmFlash = false;
   Timer? _flashTimer;
 
+  // Night mode
+  bool _nightMode = false;
+
   // MoB state
   bool _mobArmed = false;
   Timer? _mobTimer;
@@ -58,6 +64,13 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   // Tile providers.
   final _baseLayer = OsmBaseProvider();
   final _seaLayer = OpenSeaMapProvider();
+  final _nightBaseLayer = CartoDbDarkProvider();
+
+  @override
+  void initState() {
+    super.initState();
+    _nightMode = widget.initialNightMode;
+  }
 
   @override
   void dispose() {
@@ -333,15 +346,15 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               },
             ),
             children: [
-              _baseLayer.tileLayer,
-              _seaLayer.tileLayer,
-              const RepaintBoundary(child: WeatherLayer()),
+              _nightMode ? _nightBaseLayer.tileLayer : _baseLayer.tileLayer,
+              if (!_nightMode) _seaLayer.tileLayer,
+              if (!_nightMode) const RepaintBoundary(child: WeatherLayer()),
               const RepaintBoundary(child: TideLayer()),
               RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
               const RepaintBoundary(child: AnchorLayer()),
               const RepaintBoundary(child: AutoRoutePreviewLayer()),
               RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
-              const RepaintBoundary(child: FriendsLayer()),
+              if (!_nightMode) const RepaintBoundary(child: FriendsLayer()),
               RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
             ],
           ),
@@ -353,6 +366,18 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             return ScaleBarLayer(camera: _mapController.camera);
           },
         ),
+
+        // Night mode instrument strip (top, helm-readable)
+        if (_nightMode)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _NightInstrumentStrip(
+              vessel: vessel,
+              navData: navData,
+            ),
+          ),
 
         // Route navigation overlay (XTE, bearing, distance, ETA).
         if (navData != null)
@@ -410,14 +435,16 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                 height: Spacing.minTapTarget,
                 child: FloatingActionButton.small(
                   heroTag: 'nightMode',
+                  backgroundColor: _nightMode ? Colors.red[900] : null,
+                  foregroundColor: _nightMode ? Colors.red[200] : null,
                   onPressed: () {
                     HapticFeedback.selectionClick();
-                    ref.read(appSettingsProvider.notifier).toggleNightMode();
+                    setState(() => _nightMode = !_nightMode);
                   },
                   child: Icon(
-                    settings.nightMode
-                        ? Icons.dark_mode
-                        : Icons.dark_mode_outlined,
+                    _nightMode
+                        ? Icons.wb_sunny
+                        : Icons.nightlight_round,
                   ),
                 ),
               ),
@@ -799,6 +826,140 @@ class _MobActiveBannerState extends State<_MobActiveBanner>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Night mode instrument strip
+// ---------------------------------------------------------------------------
+
+class _NightInstrumentStrip extends StatelessWidget {
+  final VesselState vessel;
+  final RouteNavData? navData;
+
+  const _NightInstrumentStrip({required this.vessel, this.navData});
+
+  @override
+  Widget build(BuildContext context) {
+    final xteAbs = navData?.xteNm.abs();
+    final xteDir = (navData?.xteNm ?? 0) >= 0 ? 'R' : 'L';
+    final depth = vessel.depth;
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.85),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 4,
+        bottom: 6,
+        left: 8,
+        right: 8,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _NightCell(
+            label: 'COG',
+            value: vessel.cog != null
+                ? '${vessel.cog!.toStringAsFixed(0)}°'
+                : '--',
+          ),
+          _NightCell(
+            label: 'SOG',
+            value: vessel.sog != null
+                ? vessel.sog!.toStringAsFixed(1)
+                : '--',
+            unit: 'kn',
+          ),
+          _NightCell(
+            label: 'HDG',
+            value: vessel.heading != null
+                ? '${vessel.heading!.toStringAsFixed(0)}°'
+                : '--',
+          ),
+          _NightCell(
+            label: 'DEPTH',
+            value: depth != null ? depth.toStringAsFixed(1) : '--',
+            unit: 'm',
+          ),
+          _NightCell(
+            label: 'TWS',
+            value: vessel.windSpeed != null
+                ? vessel.windSpeed!.toStringAsFixed(1)
+                : '--',
+            unit: 'kn',
+          ),
+          if (navData != null)
+            _NightCell(
+              label: 'XTE',
+              value: xteAbs != null
+                  ? '${xteAbs.toStringAsFixed(2)} $xteDir'
+                  : '--',
+              color: xteAbs != null && xteAbs > 0.2
+                  ? Colors.red
+                  : xteAbs != null && xteAbs > 0.05
+                      ? Colors.orange
+                      : Colors.green,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NightCell extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? unit;
+  final Color color;
+
+  const _NightCell({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.color = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.red,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            if (unit != null) ...[
+              const SizedBox(width: 2),
+              Text(
+                unit!,
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }
