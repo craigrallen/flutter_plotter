@@ -188,41 +188,87 @@ class WeatherGribNotifier extends StateNotifier<WeatherGribState> {
 
   // ── Fetch ────────────────────────────────────────────────────────────────
 
+  /// Fetch weather grid directly from Open-Meteo (no server proxy needed).
   Future<void> fetchGrid(GribBounds bounds, String model) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final uri = Uri.parse('$_kServerBase/weather/grib').replace(
-        queryParameters: {
-          'n': bounds.north.toStringAsFixed(4),
-          's': bounds.south.toStringAsFixed(4),
-          'e': bounds.east.toStringAsFixed(4),
-          'w': bounds.west.toStringAsFixed(4),
-          'model': model,
-        },
-      );
-      final resp = await http.get(uri).timeout(const Duration(seconds: 60));
-      if (resp.statusCode != 200) {
-        throw Exception('Server returned ${resp.statusCode}');
+      // Sample grid points every 0.5° within bounds
+      const step = 0.5;
+      final points = <({double lat, double lng})>[];
+      for (double lat = bounds.south; lat <= bounds.north + 0.01; lat += step) {
+        for (double lng = bounds.west; lng <= bounds.east + 0.01; lng += step) {
+          points.add((lat: _round(lat), lng: _round(lng)));
+        }
       }
-      final json = jsonDecode(resp.body) as Map<String, dynamic>;
-      final rawGrid = (json['grid'] as List<dynamic>?) ?? [];
-      final grid = rawGrid
-          .map((e) => WeatherGribEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
+      if (points.isEmpty) throw Exception('No grid points in bounds');
+
+      // Map model name to Open-Meteo model param
+      final modelParam = switch (model.toLowerCase()) {
+        'ecmwf' => 'ecmwf_ifs025',
+        'icon'  => 'icon_seamless',
+        _       => 'gfs_seamless',
+      };
+
+      // Fetch all points in batches of 10
+      final entries = <WeatherGribEntry>[];
+      for (int i = 0; i < points.length; i += 10) {
+        final batch = points.sublist(i, (i + 10).clamp(0, points.length));
+        final results = await Future.wait(batch.map((p) => _fetchPoint(p.lat, p.lng, modelParam)));
+        entries.addAll(results.whereType<WeatherGribEntry>());
+      }
+
+      if (entries.isEmpty) throw Exception('No data returned from Open-Meteo');
 
       state = state.copyWith(
         isLoading: false,
-        grid: grid,
+        grid: entries,
         model: model,
         bounds: bounds,
         fetchedAt: DateTime.now(),
         forecastHour: 0,
       );
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  double _round(double v) => (v * 10).round() / 10;
+
+  Future<WeatherGribEntry?> _fetchPoint(double lat, double lng, String modelParam) async {
+    try {
+      final uri = Uri.parse('https://api.open-meteo.com/v1/forecast').replace(
+        queryParameters: {
+          'latitude': lat.toStringAsFixed(1),
+          'longitude': lng.toStringAsFixed(1),
+          'hourly': 'wind_speed_10m,wind_direction_10m,pressure_msl',
+          'wind_speed_unit': 'kn',
+          'forecast_days': '3',
+          'models': modelParam,
+        },
       );
+      final resp = await http.get(uri).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) return null;
+      final json = jsonDecode(resp.body) as Map<String, dynamic>;
+      final hourly = json['hourly'] as Map<String, dynamic>?;
+      if (hourly == null) return null;
+
+      final times = (hourly['time'] as List?)?.cast<String>() ?? [];
+      final speeds = (hourly['wind_speed_10m'] as List?)?.cast<num>() ?? [];
+      final dirs = (hourly['wind_direction_10m'] as List?)?.cast<num>() ?? [];
+      final pressures = (hourly['pressure_msl'] as List?)?.cast<num?>() ?? [];
+
+      final hours = <WeatherHourlyEntry>[];
+      for (int i = 0; i < times.length; i++) {
+        hours.add(WeatherHourlyEntry(
+          time: DateTime.parse(times[i]),
+          windSpeed: (speeds.length > i ? speeds[i] : 0).toDouble(),
+          windDir: (dirs.length > i ? dirs[i] : 0).toDouble(),
+          pressure: pressures.length > i ? pressures[i]?.toDouble() : null,
+        ));
+      }
+      return WeatherGribEntry(lat: lat, lng: lng, hours: hours);
+    } catch (_) {
+      return null;
     }
   }
 
