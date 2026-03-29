@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floatilla — GRIB Weather</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #e6edf3;
+           display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Header */
+    header { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 20px;
+             display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+    header h1 { font-size: 16px; font-weight: 600; }
+    .badge { background: #1f6feb; color: #fff; border-radius: 10px; padding: 2px 9px; font-size: 11px; }
+
+    /* Layout */
+    .app-body { display: flex; flex: 1; overflow: hidden; }
+    #map { flex: 1; }
+
+    /* Controls panel */
+    #controls { width: 260px; background: #161b22; border-right: 1px solid #30363d;
+                padding: 16px; display: flex; flex-direction: column; gap: 14px;
+                overflow-y: auto; flex-shrink: 0; }
+    @media (max-width: 640px) {
+      .app-body { flex-direction: column-reverse; }
+      #controls { width: 100%; height: 200px; border-right: none; border-top: 1px solid #30363d; }
+      #map { flex: 1; }
+    }
+
+    label.ctrl-label { font-size: 11px; color: #8b949e; text-transform: uppercase;
+                       letter-spacing: .5px; display: block; margin-bottom: 5px; }
+
+    select, input[type=range] { width: 100%; }
+    select { background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+             color: #e6edf3; padding: 7px 10px; font-size: 13px; }
+    select:focus { outline: none; border-color: #1f6feb; }
+
+    input[type=range] { accent-color: #1f6feb; }
+
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row .time-label { min-width: 40px; font-size: 12px; text-align: right; color: #8b949e; }
+
+    button { background: #1f6feb; border: none; border-radius: 6px; color: #fff;
+             padding: 8px 14px; font-size: 13px; cursor: pointer; display: flex;
+             align-items: center; gap: 6px; }
+    button:hover { background: #388bfd; }
+    button:disabled { background: #30363d; cursor: default; }
+    button.secondary { background: #21262d; border: 1px solid #30363d; }
+    button.secondary:hover { background: #30363d; }
+
+    .layer-toggles { display: flex; gap: 6px; flex-wrap: wrap; }
+    .toggle-chip { background: #21262d; border: 1px solid #30363d; border-radius: 16px;
+                   padding: 4px 12px; font-size: 12px; cursor: pointer; user-select: none;
+                   transition: background .15s, border-color .15s; }
+    .toggle-chip.active { background: #1f3a5f; border-color: #1f6feb; color: #79c0ff; }
+
+    #status { font-size: 11px; color: #8b949e; margin-top: 4px; }
+    #status.error { color: #f85149; }
+
+    /* Legend */
+    .legend { font-size: 11px; }
+    .legend-row { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+    /* Leaflet arrow canvas layer */
+    .wind-canvas { pointer-events: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Floatilla</h1>
+  <span class="badge">GRIB Weather</span>
+</header>
+
+<div class="app-body">
+  <!-- Controls -->
+  <div id="controls">
+
+    <div>
+      <label class="ctrl-label">Model</label>
+      <select id="modelSel">
+        <option value="gfs">GFS (NOAA)</option>
+        <option value="ecmwf">ECMWF IFS</option>
+        <option value="icon">ICON (DWD)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="ctrl-label">Forecast time: <span id="hourLabel">0h</span></label>
+      <div class="row">
+        <input type="range" id="hourSlider" min="0" max="72" step="3" value="0">
+        <button id="playBtn" class="secondary" title="Animate" style="padding:6px 10px; flex-shrink:0">
+          &#9654;
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <label class="ctrl-label">Layers</label>
+      <div class="layer-toggles">
+        <span class="toggle-chip active" data-layer="wind">Wind</span>
+        <span class="toggle-chip" data-layer="pressure">Pressure</span>
+      </div>
+    </div>
+
+    <button id="fetchBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13 5v6h1.17L12 13.17 9.83 11H11V5h2zm-2-2H9v6H6l6 6 6-6h-3V3zM5 19v2h14v-2H5z"/>
+      </svg>
+      Fetch Grid
+    </button>
+
+    <div id="status">Ready — click Fetch Grid to load weather.</div>
+
+    <!-- Wind speed legend -->
+    <div>
+      <label class="ctrl-label">Wind speed</label>
+      <div class="legend">
+        <div class="legend-row"><div class="swatch" style="background:#9e9e9e"></div><span>Calm (&lt;1 kn)</span></div>
+        <div class="legend-row"><div class="swatch" style="background:#4caf50"></div><span>1–10 kn</span></div>
+        <div class="legend-row"><div class="swatch" style="background:#f9a825"></div><span>11–20 kn</span></div>
+        <div class="legend-row"><div class="swatch" style="background:#ef6c00"></div><span>21–33 kn</span></div>
+        <div class="legend-row"><div class="swatch" style="background:#d32f2f"></div><span>34+ kn</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Map -->
+  <div id="map"></div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const SERVER = 'https://floatilla.app';
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([57, 18], 6);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+}).addTo(map);
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let gridData = [];           // Array of { lat, lng, hours: [{time, windSpeed, windDir, pressure}] }
+let forecastHour = 0;
+let showWind = true;
+let showPressure = false;
+let animTimer = null;
+let isAnimating = false;
+
+// ── Canvas overlay ────────────────────────────────────────────────────────────
+const WindLayer = L.Layer.extend({
+  onAdd(map) {
+    this._map = map;
+    const pane = map.getPane('overlayPane');
+    this._canvas = L.DomUtil.create('canvas', 'wind-canvas', pane);
+    this._canvas.style.position = 'absolute';
+    this._canvas.style.top = '0';
+    this._canvas.style.left = '0';
+    map.on('moveend zoomend resize', this._redraw, this);
+    this._redraw();
+  },
+  onRemove(map) {
+    map.off('moveend zoomend resize', this._redraw, this);
+    this._canvas.remove();
+  },
+  redraw() { this._redraw(); },
+  _redraw() {
+    if (!this._map) return;
+    const size = this._map.getSize();
+    this._canvas.width  = size.x;
+    this._canvas.height = size.y;
+    const ctx = this._canvas.getContext('2d');
+    ctx.clearRect(0, 0, size.x, size.y);
+    if (showWind) _drawWindArrows(ctx, size);
+    if (showPressure) _drawIsobars(ctx, size);
+  },
+});
+const windLayer = new WindLayer();
+windLayer.addTo(map);
+
+// ── Wind drawing ──────────────────────────────────────────────────────────────
+function windColor(kn) {
+  if (kn < 1)  return '#9e9e9e';
+  if (kn < 11) return '#4caf50';
+  if (kn < 21) return '#f9a825';
+  if (kn < 34) return '#ef6c00';
+  return '#d32f2f';
+}
+
+function _drawWindArrows(ctx, size) {
+  const hourIdx = forecastHour; // actual hour index; grid stores all hours
+
+  for (const pt of gridData) {
+    const hours = pt.hours || [];
+    // Find the entry closest to forecastHour
+    const entry = hours[Math.min(forecastHour, hours.length - 1)];
+    if (!entry) continue;
+
+    const { x, y } = map.latLngToContainerPoint([pt.lat, pt.lng]);
+    if (x < -20 || x > size.x + 20 || y < -20 || y > size.y + 20) continue;
+
+    const speed = entry.windSpeed ?? 0;
+    const dir   = entry.windDir   ?? 0;
+    const color = windColor(speed);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((dir * Math.PI) / 180);
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineCap     = 'round';
+
+    // Draw arrow: shaft + arrowhead
+    const len = 16;
+    ctx.beginPath();
+    ctx.moveTo(0, -len / 2);
+    ctx.lineTo(0,  len / 2);
+    ctx.stroke();
+
+    // Arrowhead at tail (wind FROM direction)
+    ctx.beginPath();
+    ctx.moveTo(0, len / 2);
+    ctx.lineTo(-5, len / 2 - 7);
+    ctx.lineTo(5,  len / 2 - 7);
+    ctx.closePath();
+    ctx.fill();
+
+    // Speed label
+    if (speed >= 1) {
+      ctx.rotate(-((dir * Math.PI) / 180));
+      ctx.font = '8px system-ui';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.round(speed), 10, -len / 2 + 3);
+    }
+
+    ctx.restore();
+  }
+}
+
+function _drawIsobars(ctx, size) {
+  if (gridData.length < 4) return;
+
+  const lats = [...new Set(gridData.map(p => p.lat))].sort((a, b) => a - b);
+  const lngs = [...new Set(gridData.map(p => p.lng))].sort((a, b) => a - b);
+  if (lats.length < 2 || lngs.length < 2) return;
+
+  const pressures = {};
+  for (const pt of gridData) {
+    const entry = (pt.hours || [])[Math.min(forecastHour, (pt.hours||[]).length - 1)];
+    if (entry?.pressure != null) pressures[`${pt.lat},${pt.lng}`] = entry.pressure;
+  }
+
+  function getP(li, lj) { return pressures[`${lats[li]},${lngs[lj]}`] ?? null; }
+
+  let minP = Infinity, maxP = -Infinity;
+  for (const v of Object.values(pressures)) {
+    if (v < minP) minP = v;
+    if (v > maxP) maxP = v;
+  }
+  const startP = Math.ceil(minP / 2) * 2;
+  const endP   = Math.floor(maxP / 2) * 2;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth   = 1;
+  ctx.font        = '9px system-ui';
+  ctx.fillStyle   = 'rgba(255,255,255,0.8)';
+  ctx.textAlign   = 'center';
+
+  for (let level = startP; level <= endP; level += 2) {
+    for (let i = 0; i < lats.length - 1; i++) {
+      for (let j = 0; j < lngs.length - 1; j++) {
+        const v00 = getP(i, j), v10 = getP(i+1, j);
+        const v01 = getP(i, j+1), v11 = getP(i+1, j+1);
+        if (v00==null||v10==null||v01==null||v11==null) continue;
+
+        const c00 = v00>=level?1:0, c10 = v10>=level?1:0;
+        const c01 = v01>=level?1:0, c11 = v11>=level?1:0;
+        const code = c00 | (c01<<1) | (c10<<2) | (c11<<3);
+        if (code===0 || code===15) continue;
+
+        function interp(vA, vB, latA, lngA, latB, lngB) {
+          const t = (level - vA) / (vB - vA);
+          const lat = latA + t*(latB-latA);
+          const lng = lngA + t*(lngB-lngA);
+          return map.latLngToContainerPoint([lat, lng]);
+        }
+
+        const bottom = interp(v00,v01, lats[i],lngs[j], lats[i],lngs[j+1]);
+        const top    = interp(v10,v11, lats[i+1],lngs[j], lats[i+1],lngs[j+1]);
+        const left   = interp(v00,v10, lats[i],lngs[j], lats[i+1],lngs[j]);
+        const right  = interp(v01,v11, lats[i],lngs[j+1], lats[i+1],lngs[j+1]);
+
+        function drawSeg(a, b) {
+          if (!a||!b) return;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+
+        switch(code) {
+          case 1: case 14: drawSeg(bottom,left); break;
+          case 2: case 13: drawSeg(bottom,right); break;
+          case 3: case 12: drawSeg(left,right); break;
+          case 4: case 11: drawSeg(top,left); break;
+          case 5: case 10: drawSeg(bottom,top); break;
+          case 6: case  9: drawSeg(top,right); break;
+          case 7: case  8: drawSeg(top,left); drawSeg(bottom,right); break;
+        }
+      }
+    }
+  }
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+const modelSel   = document.getElementById('modelSel');
+const hourSlider = document.getElementById('hourSlider');
+const hourLabel  = document.getElementById('hourLabel');
+const fetchBtn   = document.getElementById('fetchBtn');
+const playBtn    = document.getElementById('playBtn');
+const status     = document.getElementById('status');
+
+hourSlider.addEventListener('input', () => {
+  forecastHour = parseInt(hourSlider.value);
+  hourLabel.textContent = forecastHour + 'h';
+  windLayer.redraw();
+});
+
+document.querySelectorAll('.toggle-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.classList.toggle('active');
+    const layer = chip.dataset.layer;
+    if (layer === 'wind')     showWind     = chip.classList.contains('active');
+    if (layer === 'pressure') showPressure = chip.classList.contains('active');
+    windLayer.redraw();
+  });
+});
+
+playBtn.addEventListener('click', () => {
+  if (isAnimating) {
+    clearInterval(animTimer);
+    isAnimating = false;
+    playBtn.innerHTML = '&#9654;';
+    playBtn.title = 'Animate';
+  } else {
+    isAnimating = true;
+    playBtn.innerHTML = '&#9646;&#9646;';
+    playBtn.title = 'Stop';
+    let h = 0;
+    animTimer = setInterval(() => {
+      forecastHour = h;
+      hourSlider.value = h;
+      hourLabel.textContent = h + 'h';
+      windLayer.redraw();
+      h += 3;
+      if (h > 72) {
+        clearInterval(animTimer);
+        isAnimating = false;
+        playBtn.innerHTML = '&#9654;';
+      }
+    }, 1000);
+  }
+});
+
+fetchBtn.addEventListener('click', fetchGrid);
+
+async function fetchGrid() {
+  const bounds = map.getBounds();
+  const n = bounds.getNorth().toFixed(4);
+  const s = bounds.getSouth().toFixed(4);
+  const e = bounds.getEast().toFixed(4);
+  const w = bounds.getWest().toFixed(4);
+  const model = modelSel.value;
+
+  fetchBtn.disabled = true;
+  status.className = '';
+  status.textContent = 'Fetching grid...';
+
+  try {
+    const url = `${SERVER}/weather/grib?n=${n}&s=${s}&e=${e}&w=${w}&model=${model}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+    const json = await resp.json();
+    gridData = json.grid || [];
+    const updated = json.fetchedAt ? new Date(json.fetchedAt).toLocaleTimeString() : '';
+    status.textContent = `${gridData.length} grid points loaded (${model.toUpperCase()}) — ${updated}`;
+    windLayer.redraw();
+  } catch (e) {
+    status.className = 'error';
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    fetchBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

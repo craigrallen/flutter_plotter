@@ -716,6 +716,215 @@ app.post('/hazards/:id/confirm', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Weather / GRIB ────────────────────────────────────────────────────────────
+
+const fetch = require('node-fetch');
+
+// In-memory cache: key → { data, expiresAt }
+const weatherCache = new Map();
+const WEATHER_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function weatherCacheKey(n, s, e, w, model) {
+  // Round to 0.5° to improve cache hits
+  const rnd = v => Math.round(parseFloat(v) * 2) / 2;
+  return `${rnd(n)},${rnd(s)},${rnd(e)},${rnd(w)},${model}`;
+}
+
+const MODEL_PARAM = {
+  gfs:    'gfs_seamless',
+  ecmwf:  'ecmwf_ifs025',
+  icon:   'icon_seamless',
+  auto:   'gfs_seamless',
+};
+
+async function fetchWeatherGrid(n, s, e, w, model) {
+  const latStep = 0.5;
+  const lngStep = 0.5;
+  const points = [];
+
+  for (let lat = parseFloat(s); lat <= parseFloat(n) + 0.001; lat += latStep) {
+    for (let lng = parseFloat(w); lng <= parseFloat(e) + 0.001; lng += lngStep) {
+      points.push({
+        lat: Math.round(lat * 10) / 10,
+        lng: Math.round(lng * 10) / 10,
+      });
+    }
+  }
+
+  // Cap to 64 points to avoid hammering the API
+  const capped = points.slice(0, 64);
+
+  const modelParam = MODEL_PARAM[model] || 'gfs_seamless';
+  const results = [];
+
+  for (let i = 0; i < capped.length; i += 10) {
+    const batch = capped.slice(i, i + 10);
+    const fetched = await Promise.all(batch.map(async p => {
+      const url =
+        `https://api.open-meteo.com/v1/forecast` +
+        `?latitude=${p.lat}&longitude=${p.lng}` +
+        `&hourly=wind_speed_10m,wind_direction_10m,pressure_msl` +
+        `&wind_speed_unit=kn&forecast_days=3&models=${modelParam}`;
+      try {
+        const resp = await fetch(url, { timeout: 15000 });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const hours = (data.hourly?.time || []).map((t, idx) => ({
+          time: t,
+          windSpeed: data.hourly.wind_speed_10m?.[idx] ?? null,
+          windDir:   data.hourly.wind_direction_10m?.[idx] ?? null,
+          pressure:  data.hourly.pressure_msl?.[idx] ?? null,
+        }));
+        return { lat: p.lat, lng: p.lng, hours };
+      } catch (err) {
+        console.error(`Open-Meteo fetch error for ${p.lat},${p.lng}: ${err.message}`);
+        return null;
+      }
+    }));
+    results.push(...fetched.filter(Boolean));
+  }
+
+  return results;
+}
+
+async function fetchWaveGrid(n, s, e, w) {
+  const latStep = 0.5;
+  const lngStep = 0.5;
+  const points = [];
+
+  for (let lat = parseFloat(s); lat <= parseFloat(n) + 0.001; lat += latStep) {
+    for (let lng = parseFloat(w); lng <= parseFloat(e) + 0.001; lng += lngStep) {
+      points.push({
+        lat: Math.round(lat * 10) / 10,
+        lng: Math.round(lng * 10) / 10,
+      });
+    }
+  }
+
+  const capped = points.slice(0, 64);
+  const results = [];
+
+  for (let i = 0; i < capped.length; i += 10) {
+    const batch = capped.slice(i, i + 10);
+    const fetched = await Promise.all(batch.map(async p => {
+      const url =
+        `https://marine-api.open-meteo.com/v1/marine` +
+        `?latitude=${p.lat}&longitude=${p.lng}` +
+        `&hourly=wave_height,wave_direction,wave_period` +
+        `&forecast_days=3`;
+      try {
+        const resp = await fetch(url, { timeout: 15000 });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const hours = (data.hourly?.time || []).map((t, idx) => ({
+          time: t,
+          waveHeight: data.hourly.wave_height?.[idx] ?? null,
+          waveDir:    data.hourly.wave_direction?.[idx] ?? null,
+          wavePeriod: data.hourly.wave_period?.[idx] ?? null,
+        }));
+        return { lat: p.lat, lng: p.lng, hours };
+      } catch (err) {
+        return null;
+      }
+    }));
+    results.push(...fetched.filter(Boolean));
+  }
+
+  return results;
+}
+
+async function fetchGfsGrib(n, s, e, w, forecastHour = 0) {
+  const now = new Date();
+  const cycle = Math.floor(now.getUTCHours() / 6) * 6;
+  const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+  const cycleStr = cycle.toString().padStart(2, '0');
+  const fhStr   = forecastHour.toString().padStart(3, '0');
+
+  const url =
+    `https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl` +
+    `?file=gfs.t${cycleStr}z.pgrb2.0p25.f${fhStr}` +
+    `&all_lev=on&var_UGRD=on&var_VGRD=on&var_PRMSL=on` +
+    `&subregion=&toplat=${n}&leftlon=${w}&rightlon=${e}&bottomlat=${s}` +
+    `&dir=%2Fgfs.${dateStr}%2F${cycleStr}%2Fatmos`;
+
+  const resp = await fetch(url, { timeout: 60000 });
+  if (!resp.ok) throw new Error(`NOMADS fetch failed: ${resp.status}`);
+  return resp.buffer();
+}
+
+// GET /weather/grib — JSON grid of wind + pressure
+app.get('/weather/grib', async (req, res) => {
+  const { n, s, e, w, model = 'gfs' } = req.query;
+  if (!n || !s || !e || !w) {
+    return res.status(400).json({ error: 'n, s, e, w bounding box required' });
+  }
+
+  const cacheKey = weatherCacheKey(n, s, e, w, model);
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const grid = await fetchWeatherGrid(n, s, e, w, model);
+    const response = {
+      model,
+      fetchedAt: new Date().toISOString(),
+      bounds: { n: parseFloat(n), s: parseFloat(s), e: parseFloat(e), w: parseFloat(w) },
+      grid,
+    };
+    weatherCache.set(cacheKey, { data: response, expiresAt: Date.now() + WEATHER_CACHE_TTL_MS });
+    res.json(response);
+  } catch (err) {
+    console.error('GRIB fetch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /weather/grib/raw — raw GFS GRIB2 binary for offline storage
+app.get('/weather/grib/raw', async (req, res) => {
+  const { n, s, e, w, fh = 0 } = req.query;
+  if (!n || !s || !e || !w) {
+    return res.status(400).json({ error: 'n, s, e, w bounding box required' });
+  }
+  try {
+    const buf = await fetchGfsGrib(n, s, e, w, parseInt(fh));
+    res.set('Content-Type', 'application/octet-stream');
+    res.set('Content-Disposition', `attachment; filename="gfs-${Date.now()}.grb2"`);
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /weather/waves — JSON grid of wave data from Open-Meteo Marine API
+app.get('/weather/waves', async (req, res) => {
+  const { n, s, e, w } = req.query;
+  if (!n || !s || !e || !w) {
+    return res.status(400).json({ error: 'n, s, e, w bounding box required' });
+  }
+
+  const cacheKey = `waves:${weatherCacheKey(n, s, e, w, 'marine')}`;
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return res.json(cached.data);
+  }
+
+  try {
+    const grid = await fetchWaveGrid(n, s, e, w);
+    const response = {
+      fetchedAt: new Date().toISOString(),
+      bounds: { n: parseFloat(n), s: parseFloat(s), e: parseFloat(e), w: parseFloat(w) },
+      grid,
+    };
+    weatherCache.set(cacheKey, { data: response, expiresAt: Date.now() + WEATHER_CACHE_TTL_MS });
+    res.json(response);
+  } catch (err) {
+    console.error('Wave fetch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 
 const server = http.createServer(app);

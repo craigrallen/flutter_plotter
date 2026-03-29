@@ -40,6 +40,7 @@ import '../floatilla/cloud_logbook_screen.dart';
 import '../floatilla/boat_health_screen.dart';
 import '../floatilla/track_comparison_screen.dart';
 import '../floatilla/voyage_logger_screen.dart';
+import '../floatilla/grib_weather_screen.dart';
 import '../instruments/instrument_sidebar.dart';
 import 'responsive.dart';
 
@@ -123,6 +124,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     BoatHealthScreen(),
     TrackComparisonScreen(),
     VoyageLoggerScreen(),
+    GribWeatherScreen(),
     SettingsScreen(),
   ];
 
@@ -373,6 +375,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationDestination(
           icon: Icon(Icons.directions_boat), label: 'Voyage'),
       const NavigationDestination(
+          icon: Icon(Icons.air), label: 'GRIB'),
+      const NavigationDestination(
           icon: Icon(Icons.settings), label: 'Settings'),
     ];
   }
@@ -450,6 +454,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           icon: Icon(Icons.compare_arrows), label: Text('Compare')),
       const NavigationRailDestination(
           icon: Icon(Icons.directions_boat), label: Text('Voyage')),
+      const NavigationRailDestination(
+          icon: Icon(Icons.air), label: Text('GRIB')),
       const NavigationRailDestination(
           icon: Icon(Icons.settings), label: Text('Settings')),
     ];
