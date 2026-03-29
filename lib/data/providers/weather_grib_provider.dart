@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Server base URL ──────────────────────────────────────────────────────────
 
-const _kServerBase = 'https://floatilla.app'; // override in debug with env
+const _kServerBase = 'https://floatilla-fleet-social-production.up.railway.app'; // override in debug with env
 
 // ── Models ───────────────────────────────────────────────────────────────────
 
