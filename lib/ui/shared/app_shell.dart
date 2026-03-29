@@ -10,38 +10,12 @@ import '../../data/providers/route_provider.dart';
 import '../../data/providers/signalk_provider.dart';
 import '../../data/models/waypoint.dart';
 import '../chart/chart_screen.dart';
-import '../routes/route_list_screen.dart';
-import '../ais/target_list_screen.dart';
-import '../settings/settings_screen.dart';
-import '../signalk/signalk_dashboard.dart';
-import '../weather/weather_screen.dart';
-import '../floatilla/logbook_screen.dart';
 import '../floatilla/floatilla_shell.dart';
-import '../floatilla/mob_overlay.dart';
-import '../floatilla/polar_performance_screen.dart';
-import '../floatilla/tidal_currents_screen.dart';
-import '../floatilla/ais_cpa_screen.dart';
-import '../floatilla/ais_history_trail_screen.dart';
-import '../floatilla/deviation_table_screen.dart';
-import '../floatilla/race_start_timer_screen.dart';
-import '../floatilla/dead_reckoning_screen.dart';
-import '../floatilla/celestial_nav_screen.dart';
-import '../floatilla/sar_pattern_screen.dart';
-import '../floatilla/radar_simulator_screen.dart';
-import '../floatilla/nmea_mux_screen.dart';
-import '../floatilla/passage_plan_screen.dart';
-import '../floatilla/passage_briefing_screen.dart';
-import '../floatilla/engine_dashboard_screen.dart';
-import '../floatilla/anchor_scope_screen.dart';
-import '../floatilla/anchorage_screen.dart';
-import '../floatilla/departure_planner_screen.dart';
-import '../floatilla/tidal_gate_screen.dart';
 import '../floatilla/cloud_logbook_screen.dart';
-import '../floatilla/boat_health_screen.dart';
-import '../floatilla/track_comparison_screen.dart';
-import '../floatilla/voyage_logger_screen.dart';
-import '../floatilla/grib_weather_screen.dart';
+import '../floatilla/mob_overlay.dart';
+import '../floatilla/plugin_hub_screen.dart';
 import '../instruments/instrument_sidebar.dart';
+import '../signalk/signalk_dashboard.dart';
 import 'responsive.dart';
 
 class AppShell extends ConsumerStatefulWidget {
@@ -58,8 +32,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void initState() {
     super.initState();
-    // Auto-reconnect Signal K / NMEA after the first frame, once the
-    // DataSourceNotifier has finished loading from SharedPreferences.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeAutoConnect();
     });
@@ -68,7 +40,6 @@ class _AppShellState extends ConsumerState<AppShell> {
   Future<void> _maybeAutoConnect() async {
     if (_autoConnectDone) return;
     _autoConnectDone = true;
-    // Small delay to let DataSourceNotifier._load() complete.
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
     final config = ref.read(dataSourceProvider);
@@ -94,43 +65,19 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // 5 core screens — all other features accessed via PluginHubScreen
+  // ---------------------------------------------------------------------------
   static const _screens = <Widget>[
     ChartScreen(),
     FloatillaShell(),
-    LogbookScreen(),
-    RouteListScreen(),
-    TargetListScreen(),
     SignalKDashboard(),
-    WeatherScreen(),
-    PolarPerformanceScreen(),
-    TidalCurrentsScreen(),
-    AisHistoryTrailScreen(),
-    AisCpaScreen(),
-    DeviationTableScreen(),
-    RaceStartTimerScreen(),
-    DeadReckoningScreen(),
-    CelestialNavScreen(),
-    SarPatternScreen(),
-    RadarSimulatorScreen(),
-    NmeaMuxScreen(),
-    PassagePlanScreen(),
-    PassageBriefingScreen(),
-    EngineDashboardScreen(),
-    AnchorScopeScreen(),
-    AnchorageScreen(),
-    DeparturePlannerScreen(),
-    TidalGateScreen(),
     CloudLogbookScreen(),
-    BoatHealthScreen(),
-    TrackComparisonScreen(),
-    VoyageLoggerScreen(),
-    GribWeatherScreen(),
-    SettingsScreen(),
+    PluginHubScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    // Listen for incoming shared waypoints.
     ref.listen<List<FloatillaWaypoint>>(pendingWaypointsProvider,
         (prev, next) {
       if (next.length > (prev?.length ?? 0)) {
@@ -171,8 +118,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
-  void _showWaypointAcceptDialog(
-      BuildContext context, FloatillaWaypoint wp) {
+  void _showWaypointAcceptDialog(BuildContext context, FloatillaWaypoint wp) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -201,7 +147,6 @@ class _AppShellState extends ConsumerState<AppShell> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // Remove from pending.
               final pending = ref.read(pendingWaypointsProvider);
               ref.read(pendingWaypointsProvider.notifier).state =
                   pending.where((w) => w.id != wp.id).toList();
@@ -218,7 +163,6 @@ class _AppShellState extends ConsumerState<AppShell> {
                     notes: 'Shared by ${wp.fromUsername}',
                     createdAt: wp.createdAt,
                   ));
-              // Remove from pending.
               final pending = ref.read(pendingWaypointsProvider);
               ref.read(pendingWaypointsProvider.notifier).state =
                   pending.where((w) => w.id != wp.id).toList();
@@ -234,15 +178,13 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _wrapWithMobOverlay(Widget child) {
-    return Stack(
-      children: [
-        child,
-        const MobOverlay(),
-      ],
-    );
+    return Stack(children: [child, const MobOverlay()]);
   }
 
-  /// Phone: bottom NavigationBar.
+  // ---------------------------------------------------------------------------
+  // Layouts
+  // ---------------------------------------------------------------------------
+
   Widget _buildCompactLayout(bool anyConnected, bool skConnected) {
     return _wrapWithMobOverlay(
       Scaffold(
@@ -256,23 +198,25 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  /// Medium tablet / large phone: NavigationRail on left, no bottom nav.
   Widget _buildMediumLayout(bool anyConnected, bool skConnected) {
     return _wrapWithMobOverlay(
       Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (i) =>
-                  setState(() => _selectedIndex = i),
-              labelType: NavigationRailLabelType.all,
-              destinations: _railDestinations(anyConnected, skConnected),
+            SingleChildScrollView(
+              child: IntrinsicHeight(
+                child: NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (i) =>
+                      setState(() => _selectedIndex = i),
+                  labelType: NavigationRailLabelType.all,
+                  destinations: _railDestinations(anyConnected, skConnected),
+                ),
+              ),
             ),
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
-              child:
-                  IndexedStack(index: _selectedIndex, children: _screens),
+              child: IndexedStack(index: _selectedIndex, children: _screens),
             ),
           ],
         ),
@@ -280,24 +224,26 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  /// Large tablet: NavigationRail + persistent InstrumentSidebar on chart tab.
   Widget _buildExpandedLayout(bool anyConnected, bool skConnected) {
     return _wrapWithMobOverlay(
       Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (i) =>
-                  setState(() => _selectedIndex = i),
-              labelType: NavigationRailLabelType.all,
-              destinations: _railDestinations(anyConnected, skConnected),
+            SingleChildScrollView(
+              child: IntrinsicHeight(
+                child: NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (i) =>
+                      setState(() => _selectedIndex = i),
+                  labelType: NavigationRailLabelType.all,
+                  destinations: _railDestinations(anyConnected, skConnected),
+                ),
+              ),
             ),
             const VerticalDivider(thickness: 1, width: 1),
             if (_selectedIndex == 0) const InstrumentSidebar(),
             Expanded(
-              child:
-                  IndexedStack(index: _selectedIndex, children: _screens),
+              child: IndexedStack(index: _selectedIndex, children: _screens),
             ),
           ],
         ),
@@ -305,79 +251,29 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Navigation items — exactly 5
+  // ---------------------------------------------------------------------------
+
   List<NavigationDestination> _navDestinations(
       bool anyConnected, bool skConnected) {
     return [
-      const NavigationDestination(icon: Icon(Icons.map), label: 'Chart'),
       const NavigationDestination(
-          icon: Icon(Icons.groups), label: 'Floatilla'),
-      const NavigationDestination(icon: Icon(Icons.book), label: 'Logbook'),
-      const NavigationDestination(icon: Icon(Icons.route), label: 'Routes'),
-      NavigationDestination(
-        icon: Badge(
-          smallSize: 8,
-          backgroundColor: anyConnected ? Colors.green : Colors.transparent,
-          child: const Icon(Icons.sailing),
-        ),
-        label: 'AIS',
-      ),
+          icon: Icon(Icons.map), label: 'Chart'),
+      const NavigationDestination(
+          icon: Icon(Icons.groups), label: 'Fleet'),
       NavigationDestination(
         icon: Badge(
           smallSize: 8,
           backgroundColor: skConnected ? Colors.green : Colors.transparent,
           child: const Icon(Icons.speed),
         ),
-        label: 'Signal K',
+        label: 'Instruments',
       ),
-      const NavigationDestination(icon: Icon(Icons.cloud), label: 'Weather'),
       const NavigationDestination(
-          icon: Icon(Icons.show_chart), label: 'Polar'),
+          icon: Icon(Icons.menu_book), label: 'Logbook'),
       const NavigationDestination(
-          icon: Icon(Icons.waves), label: 'Currents'),
-      const NavigationDestination(
-          icon: Icon(Icons.history), label: 'AIS Trail'),
-      const NavigationDestination(
-          icon: Icon(Icons.warning_amber), label: 'Collision'),
-      const NavigationDestination(
-          icon: Icon(Icons.explore), label: 'Deviation'),
-      const NavigationDestination(
-          icon: Icon(Icons.flag), label: 'Race'),
-      const NavigationDestination(
-          icon: Icon(Icons.directions_boat), label: 'DR'),
-      const NavigationDestination(
-          icon: Icon(Icons.star), label: 'Celestial'),
-      const NavigationDestination(
-          icon: Icon(Icons.search), label: 'SAR'),
-      const NavigationDestination(
-          icon: Icon(Icons.radar), label: 'Radar'),
-      const NavigationDestination(
-          icon: Icon(Icons.cable), label: 'NMEA'),
-      const NavigationDestination(
-          icon: Icon(Icons.explore), label: 'Passage'),
-      const NavigationDestination(
-          icon: Icon(Icons.auto_awesome), label: 'Briefing'),
-      const NavigationDestination(
-          icon: Icon(Icons.engineering), label: 'Engine'),
-      const NavigationDestination(
-          icon: Icon(Icons.anchor), label: 'Anchor'),
-      const NavigationDestination(
-          icon: Icon(Icons.place), label: 'Anchorages'),
-      const NavigationDestination(
-          icon: Icon(Icons.calendar_today), label: 'Depart'),
-      const NavigationDestination(
-          icon: Icon(Icons.water), label: 'Tidal Gates'),
-      const NavigationDestination(
-          icon: Icon(Icons.menu_book), label: 'Log'),
-      const NavigationDestination(
-          icon: Icon(Icons.monitor_heart), label: 'Health'),
-      const NavigationDestination(
-          icon: Icon(Icons.compare_arrows), label: 'Compare'),
-      const NavigationDestination(
-          icon: Icon(Icons.directions_boat), label: 'Voyage'),
-      const NavigationDestination(
-          icon: Icon(Icons.air), label: 'GRIB'),
-      const NavigationDestination(
-          icon: Icon(Icons.settings), label: 'Settings'),
+          icon: Icon(Icons.apps), label: 'More'),
     ];
   }
 
@@ -387,77 +283,19 @@ class _AppShellState extends ConsumerState<AppShell> {
       const NavigationRailDestination(
           icon: Icon(Icons.map), label: Text('Chart')),
       const NavigationRailDestination(
-          icon: Icon(Icons.groups), label: Text('Floatilla')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.book), label: Text('Logbook')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.route), label: Text('Routes')),
-      NavigationRailDestination(
-        icon: Badge(
-          smallSize: 8,
-          backgroundColor: anyConnected ? Colors.green : Colors.transparent,
-          child: const Icon(Icons.sailing),
-        ),
-        label: const Text('AIS'),
-      ),
+          icon: Icon(Icons.groups), label: Text('Fleet')),
       NavigationRailDestination(
         icon: Badge(
           smallSize: 8,
           backgroundColor: skConnected ? Colors.green : Colors.transparent,
           child: const Icon(Icons.speed),
         ),
-        label: const Text('Signal K'),
+        label: const Text('Instruments'),
       ),
       const NavigationRailDestination(
-          icon: Icon(Icons.cloud), label: Text('Weather')),
+          icon: Icon(Icons.menu_book), label: Text('Logbook')),
       const NavigationRailDestination(
-          icon: Icon(Icons.show_chart), label: Text('Polar')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.waves), label: Text('Currents')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.history), label: Text('AIS Trail')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.warning_amber), label: Text('Collision')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.explore), label: Text('Deviation')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.flag), label: Text('Race')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.directions_boat), label: Text('DR')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.star), label: Text('Celestial')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.search), label: Text('SAR')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.radar), label: Text('Radar')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.cable), label: Text('NMEA')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.explore), label: Text('Passage')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.auto_awesome), label: Text('Briefing')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.engineering), label: Text('Engine')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.anchor), label: Text('Anchor')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.place), label: Text('Anchorages')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.calendar_today), label: Text('Depart')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.water), label: Text('Tidal Gates')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.menu_book), label: Text('Log')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.monitor_heart), label: Text('Health')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.compare_arrows), label: Text('Compare')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.directions_boat), label: Text('Voyage')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.air), label: Text('GRIB')),
-      const NavigationRailDestination(
-          icon: Icon(Icons.settings), label: Text('Settings')),
+          icon: Icon(Icons.apps), label: Text('More')),
     ];
   }
 }
