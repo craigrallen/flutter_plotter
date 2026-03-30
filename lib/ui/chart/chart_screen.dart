@@ -290,7 +290,9 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     final isLandscape = orientation == Orientation.landscape;
     final safePadding = MediaQuery.of(context).padding;
 
-    return Scaffold(
+    // Wrap in dark Theme overlay when night mode is active
+    final scaffold = Scaffold(
+      backgroundColor: _nightMode ? Colors.black : null,
       body: OrientationBuilder(
         builder: (context, orientation) {
           return Row(
@@ -313,6 +315,42 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
           );
         },
       ),
+    );
+
+    if (!_nightMode) return scaffold;
+
+    // Night mode: wrap in a dark theme that covers FABs, bottom sheet etc.
+    return Theme(
+      data: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFCC2200),     // red
+          secondary: Color(0xFFCC2200),
+          surface: Color(0xFF1A0000),
+          onSurface: Color(0xFFFFCCCC),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF2A0000),
+          foregroundColor: Color(0xFFFF4422),
+        ),
+        iconButtonTheme: IconButtonThemeData(
+          style: ButtonStyle(
+            foregroundColor: WidgetStatePropertyAll(Color(0xFFFF4422)),
+            backgroundColor: WidgetStatePropertyAll(Color(0xFF1A0000)),
+          ),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.black,
+          indicatorColor: const Color(0xFF3A0000),
+          iconTheme: WidgetStatePropertyAll(
+            const IconThemeData(color: Color(0xFFCC4422)),
+          ),
+          labelTextStyle: WidgetStatePropertyAll(
+            const TextStyle(color: Color(0xFFCC4422), fontSize: 11),
+          ),
+        ),
+      ),
+      child: scaffold,
     );
   }
 

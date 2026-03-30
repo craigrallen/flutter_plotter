@@ -39,6 +39,7 @@ import '../floatilla/voyage_logger_screen.dart';
 import '../routes/route_list_screen.dart';
 import '../signalk/signalk_dashboard.dart';
 import '../weather/weather_screen.dart';
+import '../settings/settings_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -310,6 +311,17 @@ final List<_Category> _categories = [
         name: 'Deviation\nTable',
         icon: Icons.explore,
         builder: (_) => const DeviationTableScreen(),
+      ),
+    ],
+  ),
+_Category(
+    name: 'Settings',
+    color: const Color(0xFF455A64), // blue-grey
+    plugins: [
+      _PluginEntry(
+        name: 'Settings',
+        icon: Icons.settings,
+        builder: (_) => const SettingsScreen(),
       ),
     ],
   ),
