@@ -4,6 +4,7 @@ import '../../core/floatilla/floatilla_models.dart';
 import '../../core/nmea/nmea_stream.dart';
 import '../../core/signalk/signalk_source.dart';
 import '../../data/providers/data_source_provider.dart';
+import '../../data/providers/settings_provider.dart';
 import '../../data/providers/floatilla_provider.dart';
 import '../../data/providers/nmea_config_provider.dart';
 import '../../data/providers/route_provider.dart';
@@ -97,6 +98,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final connState = ref.watch(nmeaConnectionStateProvider);
     final skConnState = ref.watch(signalKConnectionStateProvider);
+    final nightMode = ref.watch(appSettingsProvider.select((s) => s.nightMode));
 
     final isConnected = connState.when(
       data: (s) => s == NmeaConnectionState.connected,
@@ -108,14 +110,57 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final layout = Responsive.of(context);
 
+    Widget shell;
     switch (layout) {
       case LayoutSize.compact:
-        return _buildCompactLayout(anyConnected, skConnected);
+        shell = _buildCompactLayout(anyConnected, skConnected);
+        break;
       case LayoutSize.medium:
-        return _buildMediumLayout(anyConnected, skConnected);
+        shell = _buildMediumLayout(anyConnected, skConnected);
+        break;
       case LayoutSize.expanded:
-        return _buildExpandedLayout(anyConnected, skConnected);
+        shell = _buildExpandedLayout(anyConnected, skConnected);
+        break;
     }
+
+    if (!nightMode) return shell;
+
+    return Theme(
+      data: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFCC2200),
+          secondary: Color(0xFFCC2200),
+          surface: Color(0xFF0D0000),
+          onSurface: Color(0xFFFFCCCC),
+          surfaceContainer: Color(0xFF1A0000),
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: Colors.black,
+          surfaceTintColor: Colors.transparent,
+          indicatorColor: const Color(0xFF3A0000),
+          iconTheme: const WidgetStatePropertyAll(
+            IconThemeData(color: Color(0xFFDD3311)),
+          ),
+          labelTextStyle: const WidgetStatePropertyAll(
+            TextStyle(color: Color(0xFFDD3311), fontSize: 11),
+          ),
+        ),
+        navigationRailTheme: const NavigationRailThemeData(
+          backgroundColor: Color(0xFF0D0000),
+          selectedIconTheme: IconThemeData(color: Color(0xFFDD3311)),
+          unselectedIconTheme: IconThemeData(color: Color(0xFF661100)),
+          selectedLabelTextStyle: TextStyle(color: Color(0xFFDD3311)),
+          unselectedLabelTextStyle: TextStyle(color: Color(0xFF661100)),
+          indicatorColor: Color(0xFF3A0000),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Color(0xFF2A0000),
+          foregroundColor: Color(0xFFFF4422),
+        ),
+      ),
+      child: shell,
+    );
   }
 
   void _showWaypointAcceptDialog(BuildContext context, FloatillaWaypoint wp) {

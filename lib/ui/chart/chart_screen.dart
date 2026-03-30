@@ -53,7 +53,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   Timer? _flashTimer;
 
   // Night mode
-  bool _nightMode = false;
+
 
   // MoB state
   bool _mobArmed = false;
@@ -69,7 +69,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   @override
   void initState() {
     super.initState();
-    _nightMode = widget.initialNightMode;
+
   }
 
   @override
@@ -292,7 +292,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
 
     // Wrap in dark Theme overlay when night mode is active
     final scaffold = Scaffold(
-      backgroundColor: _nightMode ? Colors.black : null,
+      backgroundColor: settings.nightMode ? Colors.black : null,
       body: OrientationBuilder(
         builder: (context, orientation) {
           return Row(
@@ -317,41 +317,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
       ),
     );
 
-    if (!_nightMode) return scaffold;
-
-    // Night mode: wrap in a dark theme that covers FABs, bottom sheet etc.
-    return Theme(
-      data: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.black,
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFCC2200),     // red
-          secondary: Color(0xFFCC2200),
-          surface: Color(0xFF1A0000),
-          onSurface: Color(0xFFFFCCCC),
-        ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFF2A0000),
-          foregroundColor: Color(0xFFFF4422),
-        ),
-        iconButtonTheme: IconButtonThemeData(
-          style: ButtonStyle(
-            foregroundColor: WidgetStatePropertyAll(Color(0xFFFF4422)),
-            backgroundColor: WidgetStatePropertyAll(Color(0xFF1A0000)),
-          ),
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          backgroundColor: Colors.black,
-          indicatorColor: const Color(0xFF3A0000),
-          iconTheme: WidgetStatePropertyAll(
-            const IconThemeData(color: Color(0xFFCC4422)),
-          ),
-          labelTextStyle: WidgetStatePropertyAll(
-            const TextStyle(color: Color(0xFFCC4422), fontSize: 11),
-          ),
-        ),
-      ),
-      child: scaffold,
-    );
+    return scaffold;
   }
 
   Widget _buildChartStack(
@@ -384,15 +350,15 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               },
             ),
             children: [
-              _nightMode ? _nightBaseLayer.tileLayer : _baseLayer.tileLayer,
-              if (!_nightMode) _seaLayer.tileLayer,
-              if (!_nightMode) const RepaintBoundary(child: WeatherLayer()),
+              settings.nightMode ? _nightBaseLayer.tileLayer : _baseLayer.tileLayer,
+              if (!settings.nightMode) _seaLayer.tileLayer,
+              if (!settings.nightMode) const RepaintBoundary(child: WeatherLayer()),
               const RepaintBoundary(child: TideLayer()),
               RepaintBoundary(child: RouteLayer(mapRotation: mapRotation)),
               const RepaintBoundary(child: AnchorLayer()),
               const RepaintBoundary(child: AutoRoutePreviewLayer()),
               RepaintBoundary(child: AisLayer(mapRotation: mapRotation)),
-              if (!_nightMode) const RepaintBoundary(child: FriendsLayer()),
+              if (!settings.nightMode) const RepaintBoundary(child: FriendsLayer()),
               RepaintBoundary(child: VesselLayer(mapRotation: mapRotation)),
             ],
           ),
@@ -406,7 +372,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
         ),
 
         // Night mode instrument strip (top, helm-readable)
-        if (_nightMode)
+        if (settings.nightMode)
           Positioned(
             top: 0,
             left: 0,
@@ -473,14 +439,14 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
                 height: Spacing.minTapTarget,
                 child: FloatingActionButton.small(
                   heroTag: 'nightMode',
-                  backgroundColor: _nightMode ? Colors.red[900] : null,
-                  foregroundColor: _nightMode ? Colors.red[200] : null,
+                  backgroundColor: settings.nightMode ? Colors.red[900] : null,
+                  foregroundColor: settings.nightMode ? Colors.red[200] : null,
                   onPressed: () {
                     HapticFeedback.selectionClick();
-                    setState(() => _nightMode = !_nightMode);
+                    ref.read(appSettingsProvider.notifier).toggleNightMode();
                   },
                   child: Icon(
-                    _nightMode
+                    settings.nightMode
                         ? Icons.wb_sunny
                         : Icons.nightlight_round,
                   ),
@@ -599,9 +565,9 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             ),
           ),
 
-        // MoB button (bottom-left)
+        // MoB button (bottom-left) — raised above instrument toggle arrow
         Positioned(
-          bottom: safePadding.bottom + Spacing.md,
+          bottom: safePadding.bottom + Spacing.minTapTarget + Spacing.md,
           left: safePadding.left + Spacing.md,
           child: SizedBox(
             height: Spacing.minTapTarget,
