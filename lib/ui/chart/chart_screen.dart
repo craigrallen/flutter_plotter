@@ -62,9 +62,10 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
   bool _mobActive = false; // our own MoB triggered
 
   // Tile providers.
-  final _baseLayer = OsmBaseProvider();
+  // final _baseLayer = OsmBaseProvider(); // Not used — using Eniro for testing
   final _seaLayer = OpenSeaMapProvider();
   final _nightBaseLayer = CartoDbDarkProvider();
+  final _eniroLayer = EniroNauticalProvider();
 
   @override
   void initState() {
@@ -350,7 +351,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               },
             ),
             children: [
-              settings.nightMode ? _nightBaseLayer.tileLayer : _baseLayer.tileLayer,
+              settings.nightMode ? _nightBaseLayer.tileLayer : _eniroLayer.tileLayer,
               if (!settings.nightMode) _seaLayer.tileLayer,
               if (!settings.nightMode) const RepaintBoundary(child: WeatherLayer()),
               const RepaintBoundary(child: TideLayer()),

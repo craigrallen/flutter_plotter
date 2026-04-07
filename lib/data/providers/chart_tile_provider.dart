@@ -47,3 +47,19 @@ class OpenSeaMapProvider implements ChartTileProvider {
         // OpenSeaMap tiles are transparent overlays — no background needed.
       );
 }
+
+/// Eniro nautical charts (Sweden/Scandinavia).
+/// Note: Public endpoint, no auth required. Licence status unknown — use for testing only.
+class EniroNauticalProvider implements ChartTileProvider {
+  @override
+  String get name => 'Eniro Nautical (SE)';
+
+  @override
+  TileLayer get tileLayer => TileLayer(
+        urlTemplate: 'https://map.eniro.com/{z}/{x}/{y}',
+        userAgentPackageName: 'com.craigrallen.flutter_plotter',
+        maxZoom: 18,
+        // 256×256 JPEG tiles, slippy map format (XYZ).
+        // Coverage: Scandinavia (Sweden, Norway, Denmark primary).
+      );
+}
