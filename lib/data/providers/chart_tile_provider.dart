@@ -56,10 +56,12 @@ class EniroNauticalProvider implements ChartTileProvider {
 
   @override
   TileLayer get tileLayer => TileLayer(
-        urlTemplate: 'https://map.eniro.com/{z}/{x}/{y}',
+        urlTemplate: 'https://map.eniro.com/geowebcache/service/tms1.0.0/nautical/{z}/{x}/{y}.png',
         userAgentPackageName: 'com.craigrallen.flutter_plotter',
-        maxZoom: 18,
-        // 256×256 JPEG tiles, slippy map format (XYZ).
+        maxZoom: 17,
+        tms: true, // TMS y-axis (flipped from XYZ)
+        // 256×256 PNG tiles, TMS format.
         // Coverage: Scandinavia (Sweden, Norway, Denmark primary).
+        // Subdomains map01–map04 available for load balancing (not used here).
       );
 }
